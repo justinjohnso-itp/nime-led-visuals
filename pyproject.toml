@@ -7,7 +7,7 @@ readme = "README.md"
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.14"
+python = "^3.13"
 adafruit-circuitpython-neopixel = "^6.3.18"
 rpi-ws281x = {version = "^5.0.0", markers = "sys_platform == 'linux'"}
 sounddevice = "^0.4.6"
