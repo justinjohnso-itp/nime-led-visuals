@@ -1,18 +1,24 @@
-[tool.poetry]
+[project]
 name = "nime-led-visuals"
 version = "0.1.0"
 description = ""
-authors = ["Justin Johnson <justinaugustejohnson@gmail.com>"]
+authors = [
+    {name = "Justin Johnson", email = "justinaugustejohnson@gmail.com"}
+]
 readme = "README.md"
-package-mode = false
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "adafruit-circuitpython-neopixel>=6.3.18,<7.0.0",
+    "rpi-ws281x>=5.0.0,<6.0.0; sys_platform == 'linux'",
+    "sounddevice>=0.4.6,<1.0.0",
+    "numpy>=1.26.0,<2.0.0",
+    "scipy>=1.13.0,<2.0.0",
+    "adafruit-circuitpython-led-animation>=2.12.4,<3.0.0",
+    "librosa>=0.11.0,<0.12.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.13"
-adafruit-circuitpython-neopixel = "^6.3.18"
-rpi-ws281x = {version = "^5.0.0", markers = "sys_platform == 'linux'"}
-sounddevice = "^0.4.6"
-numpy = "^1.26.0"
-scipy = "^1.13.0"
+[tool.poetry]
+packages = [{include = "scripts"}]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

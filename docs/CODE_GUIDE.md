@@ -9,12 +9,15 @@ nime-led-visuals/
 ├── README.md
 ├── HARDWARE_SETUP.md       # Physical wiring (companion doc)
 ├── CODE_GUIDE.md          # This file
-├── main.py                # Main loop (you'll write this)
-├── audio_analyzer.py      # Audio input & FFT (you'll write this)
-├── effects.py             # Visual effects (you'll write this)
-├── config.py              # Constants (you'll write this)
-├── test_leds.py          # LED test (you'll write this)
-└── test_audio.py         # Audio test (you'll write this)
+├── scripts/
+│   ├── main.py            # Main loop (integration of all modules)
+│   ├── audio_input.py     # File/live audio abstraction
+│   ├── audio_analyzer.py  # FFT and feature extraction
+│   ├── effects.py         # Visual effect mapping
+│   ├── config.py          # Configuration constants
+│   ├── test_leds.py       # Hardware verification test
+│   └── test_audio.py      # Audio input and analysis test
+└── test.mp3              # Sample MP3 for testing tonight
 ```
 
 ---
@@ -36,13 +39,13 @@ poetry init
 # Core LED libraries (same as your looper.py)
 poetry add rpi-ws281x
 poetry add adafruit-circuitpython-neopixel
-poetry add adafruit-circuitpython-led-animations
+poetry add adafruit-circuitpython-led-animation
 
 # Audio processing
 poetry add sounddevice numpy scipy
 
-# Optional
-poetry add pygame  # If you want to use pygame for anything
+# File input (for testing with MP3s tonight)
+poetry add librosa
 ```
 
 ---
@@ -109,25 +112,48 @@ poetry run sudo python test_leds.py
 
 ---
 
+### Phase 3b: Audio Input Abstraction (audio_input.py)
+
+**What to code:**
+Module that abstracts between file and live audio sources. This lets you test tonight with MP3s and switch to live input tomorrow.
+
+**Your task:**
+Create `audio_input.py` with:
+1. `AudioInput` base class with `read_chunk()` and `close()` methods
+2. `FileAudioInput` - read from MP3 using librosa (for testing tonight)
+3. `LiveAudioInput` - read from USB interface using sounddevice (for tomorrow)
+4. `get_audio_input()` factory function
+
+**Key benefit:** One interface for both sources - just swap one line to change input.
+
+**Example usage:**
+```python
+# Tonight: file input
+audio = get_audio_input(source="file", filepath="test.mp3")
+
+# Tomorrow: live input
+audio = get_audio_input(source="live", device=0)
+```
+
+---
+
 ### Phase 4: Test Audio Input (test_audio.py)
 
 **What to code:**
-Script to verify audio capture works.
+Script to verify audio analysis works.
 
 **Your task:**
-1. Import `sounddevice` as `sd`
-2. Import `numpy`
-3. List available audio devices: `sd.query_devices()`
-4. Create an audio stream (input, not output!)
-5. In a loop:
-   - Read audio chunk
-   - Calculate RMS (volume)
-   - Print to console
-6. Play your instrument and watch the levels change
+1. Import `audio_input` and `audio_analyzer`
+2. Create audio input (start with file mode)
+3. Loop:
+   - Read chunk from audio input
+   - Analyze with audio_analyzer
+   - Print features (volume, bass, mid, high)
 
-**Hint:** Unlike your looper.py which uses `mixer.Sound()` for playback, this uses `sd.InputStream()` for capture.
+**Tonight:** Point to an MP3 file
+**Tomorrow:** Change `source="live"` to use USB input
 
-**Expected result:** Console shows changing numbers when you play the instrument
+**Expected result:** Console shows changing numbers, matching what you're playing
 
 ---
 
@@ -380,37 +406,46 @@ comet.animate()  # Just like your looper.py
 
 ## 🧪 Testing Approach
 
-### Test 1: Hardware Only
+### Test 1: Hardware Only (test_leds.py)
 ```python
-# test_leds.py
 # Just verify strips light up
 # No audio needed yet
 ```
 
-### Test 2: Audio Only
-```python
-# test_audio.py
-# Just verify audio capture
-# No LEDs needed yet  
+### Test 2: Audio + File Input (test_audio.py with MP3)
+```bash
+# Use audio_input.py with FileAudioInput source
+poetry run python scripts/test_audio.py
+
+# Point to an MP3 file for testing TONIGHT
+# No USB audio interface needed yet
+audio = get_audio_input(source="file", filepath="test.mp3")
 ```
 
-### Test 3: Volume Reactive
+### Test 3: Switch to Live Input (1 line change)
+```bash
+# Tomorrow when you have the USB interface connected:
+audio = get_audio_input(source="live", device=0)
+
+# Everything else stays the same!
+# No code refactoring needed
+```
+
+### Test 4: Volume Reactive (main.py v1)
 ```python
-# main.py v1
 # Volume → brightness
 # Simplest audio-reactive behavior
+# Works with both file and live input
 ```
 
-### Test 4: Frequency Reactive
+### Test 5: Frequency Reactive (main.py v2)
 ```python
-# main.py v2
 # FFT → colors or strip assignment
 # More interesting, still simple
 ```
 
-### Test 5: Full Effects
+### Test 6: Full Effects (main.py v3)
 ```python
-# main.py v3
 # Use adafruit_led_animation
 # Multiple effect modes
 # Production ready
