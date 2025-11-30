@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "nime-led-visuals"
+version = "0.1.0"
+description = ""
+authors = ["Justin Johnson <justinaugustejohnson@gmail.com>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.14"
+adafruit-circuitpython-neopixel = "^6.3.18"
+rpi-ws281x = {version = "^5.0.0", markers = "sys_platform == 'linux'"}
+sounddevice = "^0.4.6"
+numpy = "^1.26.0"
+scipy = "^1.13.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
