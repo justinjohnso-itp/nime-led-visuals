@@ -53,21 +53,34 @@ class LEDEffects:
         """
         spectrum = features.get('spectrum', None)
         envelope = features.get('envelope', 0.0)
+        dominant_band = features.get('dominant_band', -1)
+        tonalness = features.get('tonalness', 0.0)
         
         if spectrum is None or len(spectrum) < 32:
-            # Fallback to legacy
             spectrum = np.zeros(32)
         
-        # Average energy in frequency regions (not sum - keeps values 0-1)
+        # Average energy in frequency regions (for edges/brightness)
         bass_energy = float(np.mean(spectrum[0:8]))      # 20-200 Hz (red)
         mid_energy = float(np.mean(spectrum[8:16]))      # 200-1.5k Hz (amber)
         treble_energy = float(np.mean(spectrum[16:32]))  # 1.5k-20k Hz (blue edges)
         
-        # Core color: weighted blend of red (0°) and amber (30°)
+        # Fallback blended hue
         core_total = bass_energy + mid_energy + 0.001
         bass_weight = bass_energy / core_total
         mid_weight = mid_energy / core_total
-        target_hue = (bass_weight * 0.0) + (mid_weight * 30.0)
+        blended_hue = (bass_weight * 0.0) + (mid_weight * 30.0)
+        
+        # Use DOMINANT BAND for color when spectrum is tonal enough
+        TONALNESS_THRESHOLD = 0.15  # Lower = more responsive to peaks
+        if dominant_band >= 0 and tonalness > TONALNESS_THRESHOLD:
+            if dominant_band < 8:
+                target_hue = 0.0      # Bass → Red
+            elif dominant_band < 16:
+                target_hue = 30.0     # Mid → Amber
+            else:
+                target_hue = 240.0    # Treble → Blue
+        else:
+            target_hue = blended_hue
         
         # Brightness from envelope
         target_brightness = max(MIN_BRIGHTNESS, envelope ** BRIGHTNESS_EXPONENT)

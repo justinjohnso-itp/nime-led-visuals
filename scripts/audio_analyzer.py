@@ -119,6 +119,9 @@ class AudioAnalyzer:
                 "transient": 0.0,
                 "envelope": self.envelope_value * 0.9,
                 "spectrum": self.prev_spectrum.copy(),
+                "dominant_band": -1,
+                "dominant_freq": 0.0,
+                "tonalness": 0.0,
             }
 
         # Ensure frame matches FFT size (for legacy bands)
@@ -150,6 +153,18 @@ class AudioAnalyzer:
         for i, idx in enumerate(self.spectrum_bins):
             if idx is not None and len(idx) > 0:
                 spectrum_bands[i] = float(np.mean(spectrum_power[idx]))
+
+        # Find dominant band BEFORE normalization (raw energy)
+        total_band_energy = float(np.sum(spectrum_bands))
+        if total_band_energy > 0.0:
+            dominant_band = int(np.argmax(spectrum_bands))
+            dominant_energy = float(spectrum_bands[dominant_band])
+            tonalness = dominant_energy / total_band_energy  # How peaked the spectrum is
+            dominant_freq = float(0.5 * (SPECTRUM_FREQS[dominant_band] + SPECTRUM_FREQS[dominant_band + 1]))
+        else:
+            dominant_band = -1
+            dominant_freq = 0.0
+            tonalness = 0.0
 
         # Update running max with decay
         self.spectrum_max = np.maximum(spectrum_bands, self.spectrum_max * self.decay_rate)
@@ -247,5 +262,8 @@ class AudioAnalyzer:
             "bandwidth": bandwidth_norm,
             "transient": transient,
             "envelope": self.envelope_value,
-            "spectrum": self.prev_spectrum.copy(),  # 32-band smoothed spectrum
+            "spectrum": self.prev_spectrum.copy(),
+            "dominant_band": dominant_band,
+            "dominant_freq": dominant_freq,
+            "tonalness": tonalness,
         }
