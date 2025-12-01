@@ -12,7 +12,7 @@ GPIO_PIN = 18  # All daisy-chained strips on GPIO 18
 SAMPLE_RATE = 44100
 CHUNK_SIZE = 1024
 AUDIO_OUTPUT_DEVICE = "hw:1,0"  # Headphones output (Raspberry Pi), survives reboots
-AUDIO_INPUT_DEVICE = 2  # Focusrite 2i2 USB (from arecord -l output)
+AUDIO_INPUT_DEVICE = 1  # Focusrite 2i2 USB (from sounddevice.query_devices())
 
 # Frequency Bands (Hz)
 BASS_LOW = 20
