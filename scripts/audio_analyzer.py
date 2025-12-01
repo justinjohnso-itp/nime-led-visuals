@@ -112,16 +112,16 @@ class AudioAnalyzer:
         # Target is envelope that responds to transients immediately
         self.target_envelope = envelope_val = max(bass_norm, mid_norm, high_norm)  # Peak of any band
         
-        # Attack: jump up quickly to new peaks (20ms = nearly instant)
+        # Attack: jump IMMEDIATELY to new peaks (nearly zero latency)
         # Decay: fall back down smoothly (150ms = natural release)
         if self.target_envelope > self.envelope_value:
-            # Attack phase: quick rise
-            attack_coeff = ATTACK_TIME / max(ATTACK_TIME, 0.001)
-            self.envelope_value += (self.target_envelope - self.envelope_value) * attack_coeff
+            # Attack phase: instant (no smoothing)
+            self.envelope_value = self.target_envelope
         else:
-            # Decay phase: smooth fall
-            decay_coeff = 1.0 - (DECAY_TIME / max(DECAY_TIME, 0.001))
-            self.envelope_value = self.envelope_value * decay_coeff + self.target_envelope * (1 - decay_coeff)
+            # Decay phase: smooth fall with exponential decay
+            chunk_duration = CHUNK_SIZE / self.sample_rate  # Actual chunk time (~23.2ms)
+            decay_factor = 1.0 - (chunk_duration / DECAY_TIME)
+            self.envelope_value = self.envelope_value * decay_factor
         
         self.envelope_value = np.clip(self.envelope_value, 0, 1)
         

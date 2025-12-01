@@ -71,59 +71,60 @@ class LEDEffects:
         # Apply power law for better perceptual distribution (quiet → very dark, loud → bright)
         brightness = max(MIN_BRIGHTNESS, envelope ** BRIGHTNESS_EXPONENT)
         
-        # Build color distribution across all LEDs
+        # Build color distribution for each strip with proper edge blending
         # Use the strongest band's energy to control stripe width
-        # Low energy (quiet) = narrow core, High energy (loud) = wider core
         strongest_band = max(bass_norm, mid_norm, high_norm)
         core_fraction = CORE_FRACTION_MIN + ((CORE_FRACTION_MAX - CORE_FRACTION_MIN) * strongest_band)
         
-        led_colors = []
-        for led_idx in range(total_leds):
-            # Distance from center (in normalized 0-1 space)
-            center_pos = total_leds / 2.0
-            distance_from_center = abs(led_idx - center_pos) / center_pos
+        # Helper function to calculate LED color based on position within a strip
+        def get_led_color(position_in_strip, is_left_edge=False, is_right_edge=False):
+            """
+            position_in_strip: 0.0-1.0 (0 = left edge of strip, 1 = right edge)
+            is_left_edge: True if this strip's edge fades toward lower freqs
+            is_right_edge: True if this strip's edge fades toward higher freqs
+            """
+            distance_from_center = abs(position_in_strip - 0.5) * 2  # 0-1, where 0 is center
             
-            # Blend distance: edges show adjacent frequencies
             if distance_from_center < core_fraction:
                 # Core region: dominant frequency
                 current_hue = hue
                 edge_fade = 1.0
             else:
                 # Edge region: blend to adjacent frequencies
-                edge_region = 1.0 - core_fraction
-                edge_factor = (distance_from_center - core_fraction) / max(edge_region, 0.01)  # 0-1 in edge region
+                edge_region = max(1.0 - core_fraction, 0.01)
+                edge_factor = (distance_from_center - core_fraction) / edge_region
                 edge_factor = np.clip(edge_factor, 0, 1)
                 
-                # Determine which side we're on and blend appropriately
-                if led_idx > center_pos:
-                    # Right edge: fade toward higher frequencies (more blue)
+                if is_right_edge and position_in_strip > 0.5:
+                    # Right-side edge: fade toward higher frequencies (more blue)
                     current_hue = hue + (edge_factor * EDGE_HUE_SHIFT)
-                else:
-                    # Left edge: fade toward lower frequencies (more red)
+                elif is_left_edge and position_in_strip < 0.5:
+                    # Left-side edge (mirrored): fade toward lower frequencies (more red)
                     current_hue = hue - (edge_factor * EDGE_HUE_SHIFT)
+                else:
+                    # Center region (no edge blending)
+                    current_hue = hue
                 
                 edge_fade = 1.0 - (edge_factor * EDGE_FADE_RATE)
             
-            # Clamp hue to valid range
             current_hue = np.clip(current_hue, 0, 360)
-            
-            # Convert HSV to RGB
             r, g, b = colorsys.hsv_to_rgb(current_hue / 360.0, 1.0, brightness * edge_fade)
-            color = (int(r * 255), int(g * 255), int(b * 255))
-            led_colors.append(color)
+            return (int(r * 255), int(g * 255), int(b * 255))
         
-        # Distribute colors symmetrically: left edge blends secondary → core → right edge blends secondary
-        # This creates a mirror effect where edges show adjacent frequencies
+        # Build colors for left strip (left edge fades secondary, right = core)
         for i in range(NUM_LEDS_PER_STRIP):
-            # Left strip: mirrored (reversed), so left edge (index 0) shows the fade like right edge
-            left_idx = NUM_LEDS_PER_STRIP - 1 - i
-            strips[0][i] = led_colors[left_idx]
-            
-            # Center strip: pure core
-            strips[1][i] = led_colors[NUM_LEDS_PER_STRIP + i]
-            
-            # Right strip: normal order
-            strips[2][i] = led_colors[2*NUM_LEDS_PER_STRIP + i]
+            pos = i / NUM_LEDS_PER_STRIP  # 0-1 across the strip
+            strips[0][i] = get_led_color(pos, is_left_edge=True)
+        
+        # Build colors for center strip (both edges fade secondary, center = core)
+        for i in range(NUM_LEDS_PER_STRIP):
+            pos = i / NUM_LEDS_PER_STRIP
+            strips[1][i] = get_led_color(pos, is_left_edge=True, is_right_edge=True)
+        
+        # Build colors for right strip (left = core, right edge fades secondary)
+        for i in range(NUM_LEDS_PER_STRIP):
+            pos = i / NUM_LEDS_PER_STRIP
+            strips[2][i] = get_led_color(pos, is_right_edge=True)
 
     @staticmethod
     def pulse_effect(strip, volume, color=(255, 255, 255)):
