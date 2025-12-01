@@ -86,7 +86,7 @@ def main(filepath):
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print("Usage: poetry run python analyze_audio.py <mp3_file>")
+        print("Usage: pixi run test-audio <mp3_file>")
         sys.exit(1)
 
     main(sys.argv[1])

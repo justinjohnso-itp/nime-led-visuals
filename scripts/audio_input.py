@@ -28,7 +28,7 @@ class FileAudioInput(AudioInput):
         try:
             import librosa
         except ImportError:
-            print("Error: librosa not installed. Run: poetry add librosa")
+            print("Error: librosa not installed. Run: pixi add librosa")
             raise
 
         # Load entire file
@@ -68,7 +68,7 @@ class LiveAudioInput(AudioInput):
         try:
             import sounddevice as sd
         except ImportError:
-            print("Error: sounddevice not installed. Run: poetry add sounddevice")
+            print("Error: sounddevice not installed. Run: pixi add sounddevice")
             raise
 
         print(f"Opening audio device {device}...")

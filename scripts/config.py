@@ -5,8 +5,8 @@ NUM_LEDS_PER_STRIP = 144
 NUM_STRIPS = 3
 LED_BRIGHTNESS = 0.3  # 30% to save power
 
-# GPIO Pins (BCM numbering) - use PWM-capable pins
-GPIO_PINS = [18, 13, 19]  # Strip 1, Strip 2, Strip 3
+# GPIO Pin (BCM numbering)
+GPIO_PIN = 18  # All daisy-chained strips on GPIO 18
 
 # Audio Configuration
 SAMPLE_RATE = 44100

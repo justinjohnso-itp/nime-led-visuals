@@ -17,7 +17,7 @@ Audio-reactive LED visual system for Daisy Seed instrument output on Raspberry P
 ### Installation
 
 ```bash
-poetry install
+pixi install
 ```
 
 ### Wiring
@@ -34,7 +34,7 @@ All strips share +5V and GND (star topology for power distribution).
 ## Usage
 
 ```bash
-poetry run python main.py
+pixi run run-live
 ```
 
 Analyzes audio from Daisy Seed in real-time and drives LED animations based on frequency bands:

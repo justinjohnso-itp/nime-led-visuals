@@ -9,7 +9,7 @@ import numpy as np
 import subprocess
 import os
 
-from config import GPIO_PINS, NUM_LEDS_PER_STRIP, LED_BRIGHTNESS, SAMPLE_RATE, CHUNK_SIZE
+from config import NUM_LEDS_PER_STRIP, NUM_STRIPS, LED_BRIGHTNESS, SAMPLE_RATE, CHUNK_SIZE
 from audio_input import get_audio_input
 from audio_analyzer import AudioAnalyzer
 
@@ -17,6 +17,7 @@ from audio_analyzer import AudioAnalyzer
 if platform.system() == 'Linux':
     import board
     import neopixel
+    from adafruit_led_animation.helper import PixelSubset
     from effects import LEDEffects
     HAS_LEDS = True
 else:
@@ -24,18 +25,23 @@ else:
 
 
 def initialize_strips():
-    """Create NeoPixel objects for each strip"""
-    strips = []
-    for pin_name in ['D18', 'D13', 'D19']:
-        pin = getattr(board, pin_name)
-        strip = neopixel.NeoPixel(
-            pin,
-            NUM_LEDS_PER_STRIP,
-            brightness=LED_BRIGHTNESS,
-            auto_write=False
-        )
-        strips.append(strip)
-    return strips
+    """Create NeoPixel strip with subsets for daisy-chained segments"""
+    # Single NeoPixel on GPIO 18 for all daisy-chained LEDs
+    pixels = neopixel.NeoPixel(
+        board.D18,
+        NUM_LEDS_PER_STRIP * NUM_STRIPS,
+        brightness=LED_BRIGHTNESS,
+        auto_write=False
+    )
+    
+    # Create PixelSubset for each daisy-chained strip segment
+    strips = [
+        PixelSubset(pixels, 0, NUM_LEDS_PER_STRIP),
+        PixelSubset(pixels, NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP),
+        PixelSubset(pixels, 2 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP)
+    ]
+    
+    return pixels, strips
 
 
 def audio_thread_func(audio, analyzer, shared_features, stop_event):
@@ -65,11 +71,12 @@ def audio_thread_func(audio, analyzer, shared_features, stop_event):
         audio.close()
 
 
-def led_thread_func(strips, shared_features, stop_event):
+def led_thread_func(pixels, strips, shared_features, stop_event):
     """Update LEDs periodically without blocking audio
     
     Args:
-        strips: list of neopixel.NeoPixel objects
+        pixels: main neopixel.NeoPixel object (for show() calls)
+        strips: list of PixelSubset objects
         shared_features: dict with latest audio features
         stop_event: threading.Event to signal shutdown
     """
@@ -78,15 +85,17 @@ def led_thread_func(strips, shared_features, stop_event):
             # Use latest features from audio thread
             LEDEffects.frequency_spectrum(strips, shared_features)
             
+            # Show all changes at once (daisy-chained)
+            pixels.show()
+            
             # Fixed 20 FPS LED updates (50ms)
             time.sleep(0.05)
     except Exception as e:
         print(f"\n❌ LED thread error: {e}")
     finally:
         # Cleanup LEDs
-        for strip in strips:
-            strip.fill((0, 0, 0))
-            strip.show()
+        pixels.fill((0, 0, 0))
+        pixels.show()
 
 
 def main(audio_source='live', filepath=None):
@@ -98,9 +107,10 @@ def main(audio_source='live', filepath=None):
     """
     if HAS_LEDS:
         print("🎨 Initializing LED strips...")
-        strips = initialize_strips()
+        pixels, strips = initialize_strips()
     else:
         print("📱 (No LEDs on this platform, audio analysis only)")
+        pixels = None
         strips = None
 
     print("🎵 Initializing audio input...")
@@ -146,7 +156,7 @@ def main(audio_source='live', filepath=None):
     if HAS_LEDS:
         led_t = threading.Thread(
             target=led_thread_func,
-            args=(strips, shared_features, stop_event),
+            args=(pixels, strips, shared_features, stop_event),
             daemon=True,
             name="LEDThread"
         )

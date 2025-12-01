@@ -11,7 +11,7 @@ class LEDEffects:
         """Light up LEDs from start based on volume, with brightness following amplitude
         
         Args:
-            strip: neopixel.NeoPixel object
+            strip: neopixel.NeoPixel or PixelSubset object
             volume: 0.0-1.0 volume level
             color: RGB tuple
         """
@@ -27,14 +27,12 @@ class LEDEffects:
             else:
                 strip[i] = (0, 0, 0)
 
-        strip.show()
-
     @staticmethod
     def frequency_spectrum(strips, features):
-        """Show three frequency bands on three strips
+        """Show three frequency bands on three daisy-chained strips
         
         Args:
-            strips: list of 3 neopixel.NeoPixel objects [bass, mid, high]
+            strips: list of 3 PixelSubset objects [bass, mid, high]
             features: dict from audio_analyzer with bass/mid/high (0.0-1.0)
         """
         colors = [COLORS['bass'], COLORS['mid'], COLORS['high']]
@@ -45,10 +43,10 @@ class LEDEffects:
 
     @staticmethod
     def pulse_effect(strip, volume, color=(255, 255, 255)):
-        """Pulse entire strip brightness with volume
+        """Pulse entire strip brightness with volume (call pixels.show() after)
         
         Args:
-            strip: neopixel.NeoPixel object
+            strip: PixelSubset or neopixel.NeoPixel object
             volume: 0.0-1.0 volume level
             color: RGB tuple
         """
@@ -58,14 +56,12 @@ class LEDEffects:
         for i in range(len(strip)):
             strip[i] = scaled_color
 
-        strip.show()
-
     @staticmethod
     def waveform_viz(strip, audio_data):
-        """Downsample waveform to LED count and display
+        """Downsample waveform to LED count and display (call pixels.show() after)
         
         Args:
-            strip: neopixel.NeoPixel object
+            strip: PixelSubset or neopixel.NeoPixel object
             audio_data: numpy array of audio samples
         """
         num_leds = len(strip)
@@ -83,14 +79,12 @@ class LEDEffects:
             brightness = int(amplitude * 255)
             strip[i] = (brightness, brightness, brightness)
 
-        strip.show()
-
     @staticmethod
     def rainbow_chase(strip, position, speed=0.1):
-        """Rainbow color chase across strip
+        """Rainbow color chase across strip (call pixels.show() after)
         
         Args:
-            strip: neopixel.NeoPixel object
+            strip: PixelSubset or neopixel.NeoPixel object
             position: 0.0-1.0 position along strip
             speed: animation speed (unused, for future)
         """
@@ -104,8 +98,6 @@ class LEDEffects:
             hue = (i / num_leds) * 360
             rgb = LEDEffects._hsv_to_rgb(hue, 1.0, brightness / 255.0)
             strip[i] = rgb
-
-        strip.show()
 
     @staticmethod
     def _hsv_to_rgb(h, s, v):
@@ -125,10 +117,10 @@ class LEDEffects:
 
     @staticmethod
     def attack_flash(strip, volume, prev_volume, threshold=0.3, flash_color=(255, 255, 255)):
-        """Flash on sudden volume increase (note onset)
+        """Flash on sudden volume increase (call pixels.show() after)
         
         Args:
-            strip: neopixel.NeoPixel object
+            strip: PixelSubset or neopixel.NeoPixel object
             volume: current volume 0.0-1.0
             prev_volume: previous volume 0.0-1.0
             threshold: volume increase threshold to trigger flash
@@ -145,5 +137,3 @@ class LEDEffects:
             dim_color = tuple(int(c * volume * 0.5) for c in flash_color)
             for i in range(len(strip)):
                 strip[i] = dim_color
-
-        strip.show()
