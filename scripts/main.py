@@ -61,7 +61,7 @@ def main(audio_source='live', filepath=None):
         if platform.system() == 'Darwin':
             subprocess.Popen(['afplay', filepath])
         elif platform.system() == 'Linux':
-            subprocess.Popen(['aplay', filepath])
+            subprocess.Popen(['mpg123', filepath], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
         print("🔊 Playing audio...")
 
     print("▶️  Starting audio-reactive visualization...")

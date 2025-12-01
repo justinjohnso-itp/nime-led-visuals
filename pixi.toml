@@ -14,6 +14,6 @@ librosa = ">=0.11.0"
 
 [tasks]
 test-audio = "python scripts/test_audio.py music/test.mp3"
-test-leds = "sudo {env:PIXI_PREFIX}/bin/python scripts/test_led.py"
+test-leds = "bash run_leds.sh"
 run-file = "python scripts/main.py --file test.mp3"
-run-live = "sudo {env:PIXI_PREFIX}/bin/python scripts/main.py"
+run-live = "bash run_live.sh"

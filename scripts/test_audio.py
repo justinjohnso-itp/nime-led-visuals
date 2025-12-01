@@ -14,12 +14,14 @@ def main(filepath):
     print(f"Analyzing: {filepath}\n")
 
     # Start audio playback in background
-    if platform.system() == 'Darwin':
-        subprocess.Popen(['afplay', filepath])
-    elif platform.system() == 'Linux':
-        subprocess.Popen(['aplay', filepath])
-    
-    print("Playing audio...\n")
+    try:
+        if platform.system() == 'Darwin':
+            subprocess.Popen(['afplay', filepath], stderr=subprocess.DEVNULL)
+        elif platform.system() == 'Linux':
+            subprocess.Popen(['mpg123', filepath], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        print("Playing audio...\n")
+    except Exception as e:
+        print(f"⚠️  Audio playback unavailable: {e}\n")
 
     audio = get_audio_input(source="file", filepath=filepath, sample_rate=SAMPLE_RATE, chunk_size=CHUNK_SIZE)
     analyzer = AudioAnalyzer(sample_rate=SAMPLE_RATE)
