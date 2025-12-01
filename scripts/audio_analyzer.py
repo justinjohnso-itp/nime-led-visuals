@@ -50,9 +50,10 @@ class AudioAnalyzer:
         self.envelope_value = 0.0
         self.target_envelope = 0.0
         
-        # Audio buffer for librosa (needs 2+ chunks for stable mel-spectrogram)
+        # Audio buffer for librosa melspectrogram
+        # We need n_fft samples minimum (2048) for good frequency resolution
         self.audio_buffer = np.array([], dtype=np.float32)
-        self.min_buffer_size = CHUNK_SIZE
+        self.min_buffer_size = 2048  # n_fft size - minimum for melspectrogram
 
     def analyze(self, audio_chunk):
         """Analyze audio using mel-scale spectrogram (better frequency separation)
@@ -92,38 +93,50 @@ class AudioAnalyzer:
         # Apply noise gate
         if volume < NOISE_GATE_THRESHOLD:
             volume = 0.0
-            mel_spec = None
-        else:
-            # Compute mel-spectrogram: librosa handles windowing/overlap internally
-            # n_mels=128: 128 mel-bands (logarithmic frequency spacing)
-            # n_fft=2048: window size (48ms at 44.1kHz, good frequency resolution)
-            # hop_length=512: 50% overlap between frames (11.6ms)
+            # Zero out buffer if too quiet
+            self.audio_buffer = np.zeros_like(self.audio_buffer)
+        
+        # Compute mel-spectrogram: librosa handles windowing/overlap internally
+        # n_mels=128: 128 mel-bands (logarithmic frequency spacing)
+        # n_fft=2048: window size (good frequency resolution)
+        # hop_length=512: 50% overlap between frames
+        try:
             mel_spec = librosa.feature.melspectrogram(
                 y=self.audio_buffer,
                 sr=self.sample_rate,
                 n_mels=128,  # 128 mel-bands (logarithmic frequency scale)
-                n_fft=2048,  # 2x the default for better low-freq separation
+                n_fft=2048,  # Large FFT for low-freq separation
                 hop_length=512,  # 50% overlap = less spectral leakage
                 fmin=FREQ_MIN,  # 20 Hz floor
                 fmax=FREQ_MAX,  # 20 kHz ceiling
                 power=2.0,  # Power spectrum (magnitude squared)
+                window='hann',
+                center=True,  # Center padding for alignment
+                pad_mode='reflect',  # Better than zeros for edges
             )
-        
-        # Drop first chunk from buffer (analyzed, overlaps with next iteration)
-        self.audio_buffer = self.audio_buffer[CHUNK_SIZE:]
-        
-        # If no mel-spec (due to noise gate), return empty
-        if mel_spec is None:
+        except Exception as e:
+            print(f"Melspectrogram error: {e}")
             return self._empty_features()
         
-        # Convert power spectrum to dB scale (librosa standard)
+        # Drop first chunk from buffer (to avoid re-analyzing same data next iteration)
+        self.audio_buffer = self.audio_buffer[CHUNK_SIZE:]
+        
+        # Handle empty spectrogram
+        if mel_spec.shape[1] == 0:
+            return self._empty_features()
+        
+        # Convert power spectrum to dB scale
         mel_db = librosa.power_to_db(mel_spec, ref=np.max)
+        
+        # Handle NaN/inf values
+        mel_db = np.nan_to_num(mel_db, nan=-80.0, posinf=0.0, neginf=-80.0)
         
         # Extract energy from latest frame (rightmost column = most recent audio)
         latest_frame_db = mel_db[:, -1]  # Last frame
         
         # Convert dB back to linear for band energy calculation
         latest_frame_linear = librosa.db_to_power(latest_frame_db)
+        latest_frame_linear = np.nan_to_num(latest_frame_linear, nan=0.0, posinf=0.0, neginf=0.0)
         
         # Map mel-bands to our 5 frequency bands
         # Librosa provides mel_frequencies() to know which Hz each mel-band represents
