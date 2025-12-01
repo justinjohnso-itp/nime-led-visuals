@@ -88,6 +88,11 @@ class LEDEffects:
         strongest_band = max(sub_bass_val, bass_val, low_mid_val, mid_high_val, treble_val)
         core_fraction = CORE_FRACTION_MIN + ((CORE_FRACTION_MAX - CORE_FRACTION_MIN) * strongest_band)
         
+        # Pre-calculate edge expansion (how far edge colors push inward)
+        treble_edge_boost = treble_val * EDGE_HUE_SHIFT
+        edge_expansion = (1.0 - core_fraction) * (1.0 + treble_val)  # Edges expand more with treble
+        edge_expansion = np.clip(edge_expansion, 0, 0.75)  # Cap at 75% of strip
+        
         # Helper function to calculate LED color based on position within a strip
         def get_led_color(position_in_strip, is_left_edge=False, is_right_edge=False):
             """
@@ -97,39 +102,26 @@ class LEDEffects:
             """
             distance_from_center = abs(position_in_strip - 0.5) * 2  # 0-1, where 0 is center
             
-            if distance_from_center < core_fraction:
+            # Edge bleed expands inward from the non-center side
+            edge_bleed_active = False
+            if is_right_edge and position_in_strip > (0.5 - edge_expansion):
+                # Right edge: bleeds inward from position 1.0 towards center
+                edge_distance = (1.0 - position_in_strip) / edge_expansion
+                edge_bleed_active = True
+            elif is_left_edge and position_in_strip < (0.5 + edge_expansion):
+                # Left edge: bleeds inward from position 0.0 towards center
+                edge_distance = position_in_strip / edge_expansion
+                edge_bleed_active = True
+            
+            if edge_bleed_active:
+                # Edge bleed region: blend towards treble/blue
+                edge_factor = np.clip(edge_distance, 0, 1)
+                current_hue = hue + (edge_factor * treble_edge_boost)
+                edge_fade = 1.0 - (edge_factor * EDGE_FADE_RATE)
+            else:
                 # Core region: dominant frequency
                 current_hue = hue
                 edge_fade = 1.0
-            else:
-                # Edge region: blend to adjacent frequencies
-                edge_region = max(1.0 - core_fraction, 0.01)
-                edge_factor = (distance_from_center - core_fraction) / edge_region
-                edge_factor = np.clip(edge_factor, 0, 1)
-                
-                # Determine which edge we're on based on position
-                # Edges scale their hue shift based on treble energy (hi-hats, claps)
-                # This pulls blue in when percussion hits
-                treble_edge_boost = treble_val * EDGE_HUE_SHIFT
-                
-                if position_in_strip > 0.5:
-                    # Right half of strip
-                    if is_right_edge:
-                        # Fade toward higher frequencies (more blue) - boosted by treble
-                        current_hue = hue + (edge_factor * treble_edge_boost)
-                    else:
-                        # No right edge blending
-                        current_hue = hue
-                else:
-                    # Left half of strip
-                    if is_left_edge:
-                        # Also fade toward treble/blue on left edge for symmetry
-                        current_hue = hue + (edge_factor * treble_edge_boost)
-                    else:
-                        # No left edge blending
-                        current_hue = hue
-                
-                edge_fade = 1.0 - (edge_factor * EDGE_FADE_RATE)
             
             current_hue = np.clip(current_hue, 0, 360)
             r, g, b = colorsys.hsv_to_rgb(current_hue / 360.0, 1.0, brightness * edge_fade)
@@ -140,10 +132,28 @@ class LEDEffects:
             pos = i / NUM_LEDS_PER_STRIP  # 0-1 across the strip
             strips[0][i] = get_led_color(pos, is_left_edge=True)
         
-        # Build colors for center strip (no edges, pure core)
+        # Build colors for center strip (core + red bass core expanding from center)
+        # Red core expands from center based on bass energy
+        red_core_fraction = core_fraction * bass_energy  # Red core size scales with bass
+        red_core_fraction = np.clip(red_core_fraction, 0, 1.0)
+        
         for i in range(NUM_LEDS_PER_STRIP):
             pos = i / NUM_LEDS_PER_STRIP
-            strips[1][i] = get_led_color(pos)
+            base_color = get_led_color(pos)
+            
+            # Red core from center: strong bass fills the strip with red
+            distance_from_center = abs(pos - 0.5) * 2  # 0 at center, 1 at edges
+            
+            if distance_from_center < red_core_fraction:
+                # Inside red core: blend towards pure red
+                core_blend = distance_from_center / max(red_core_fraction, 0.01)
+                r, g, b = base_color
+                r = int(255)
+                g = int(g * (1.0 - core_blend * 0.8))
+                b = int(b * (1.0 - core_blend * 0.8))
+                strips[1][i] = (r, int(np.clip(g, 0, 255)), int(np.clip(b, 0, 255)))
+            else:
+                strips[1][i] = base_color
         
         # Build colors for right strip (right edge fades secondary, rest = core)
         for i in range(NUM_LEDS_PER_STRIP):

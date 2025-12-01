@@ -37,7 +37,7 @@ class AudioAnalyzer:
         self.prev_bandwidth = 0.0
         # Per-band peak tracking (independent normalization for each band)
         self.band_max = {name: 0.1 for _, _, name in FREQ_BANDS}
-        self.decay_rate = 0.88  # Moderate decay - keeps dynamic range while killing noise
+        self.decay_rate = 0.75  # Fast decay - kills noise floor quickly while keeping peaks responsive
         self.prev_raw_volume = 0.0  # For transient detection
         
         # Legacy band maxes for backward compatibility
@@ -74,6 +74,11 @@ class AudioAnalyzer:
         if volume < NOISE_GATE_THRESHOLD:
             volume = 0.0
             audio = np.zeros_like(audio)
+        else:
+            # Apply Hann window to eliminate spectral leakage
+            # Window function tapers signal to zero at edges, preventing discontinuities in FFT
+            window = np.hanning(len(audio))
+            audio = audio * window
 
         # FFT analysis
         fft = np.abs(np.fft.rfft(audio))
