@@ -103,7 +103,10 @@ class AudioAnalyzer:
 
         # Noise gate - if below threshold, return silence
         if volume < NOISE_GATE_THRESHOLD:
-            # Decay the spectrum smoothly
+            # Decay envelope and spectrum, snap to zero when very small
+            self.envelope_value *= 0.85
+            if self.envelope_value < 0.01:
+                self.envelope_value = 0.0
             self.prev_spectrum *= 0.9
             return {
                 "volume": 0.0,
@@ -117,7 +120,7 @@ class AudioAnalyzer:
                 "centroid": 0.0,
                 "bandwidth": 0.0,
                 "transient": 0.0,
-                "envelope": self.envelope_value * 0.9,
+                "envelope": self.envelope_value,
                 "spectrum": self.prev_spectrum.copy(),
                 "dominant_band": -1,
                 "dominant_freq": 0.0,

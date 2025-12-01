@@ -135,6 +135,12 @@ class LEDEffects:
         br, bg, bb = colorsys.hsv_to_rgb(0.0, 1.0, bass_brightness)  # Pure red for bass core
         er, eg, eb = colorsys.hsv_to_rgb(240.0 / 360.0, 1.0, edge_intensity)  # Blue
         
+        # If brightness is essentially zero, just fill black and return
+        if LEDEffects._prev_brightness < 0.005:
+            for strip in strips:
+                strip.fill((0, 0, 0))
+            return
+        
         # Fill strips with feathered edge effects
         for i in range(NUM_LEDS_PER_STRIP):
             # Strip 0: edge at high indices (right side) with gradient
