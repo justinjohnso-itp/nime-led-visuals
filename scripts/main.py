@@ -61,11 +61,7 @@ def main(audio_source='live', filepath=None):
         if platform.system() == 'Darwin':
             subprocess.Popen(['afplay', filepath])
         elif platform.system() == 'Linux':
-            # Decode MP3 with ffmpeg and pipe to aplay
-            ffmpeg_proc = subprocess.Popen(['ffmpeg', '-i', filepath, '-f', 's16le', '-acodec', 'pcm_s16le', '-ar', '44100', '-'], 
-                                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            subprocess.Popen(['aplay'], stdin=ffmpeg_proc.stdout, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-            ffmpeg_proc.stdout.close()
+            subprocess.Popen(['mpg123', filepath], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         time.sleep(0.5)  # Give playback time to start
         print("🔊 Playing audio...")
 
