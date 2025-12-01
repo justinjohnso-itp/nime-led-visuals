@@ -37,8 +37,8 @@ def initialize_strips():
     # Create PixelSubset for each daisy-chained strip segment
     strips = [
         PixelSubset(pixels, 0, NUM_LEDS_PER_STRIP),
-        PixelSubset(pixels, NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP),
-        PixelSubset(pixels, 2 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP)
+        PixelSubset(pixels, NUM_LEDS_PER_STRIP, 2 * NUM_LEDS_PER_STRIP),
+        PixelSubset(pixels, 2 * NUM_LEDS_PER_STRIP, 3 * NUM_LEDS_PER_STRIP)
     ]
     
     return pixels, strips
