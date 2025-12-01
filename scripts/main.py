@@ -88,7 +88,8 @@ def main(audio_source='live', filepath=None):
                 LEDEffects.frequency_spectrum(strips, features)
 
             # Small delay for frame rate
-            time.sleep(0.01)
+            # NOTE: NeoPixel.show() is blocking (~10ms per strip), so increase this if audio sounds choppy
+            time.sleep(0.05)
 
     except KeyboardInterrupt:
         print("\n⏹️  Stopping...")
