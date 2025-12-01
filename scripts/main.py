@@ -176,6 +176,10 @@ def main(audio_source='live', filepath=None):
             BLUE = '\033[94m'
             RESET = '\033[0m'
             
+            dominant_band = shared_features.get('dominant_band', -1)
+            tonalness = shared_features.get('tonalness', 0.0)
+            dominant_freq = shared_features.get('dominant_freq', 0.0)
+            
             if spectrum is not None and len(spectrum) >= 32:
                 # 32-band spectrum as single line with height chars
                 output = ""
@@ -187,7 +191,10 @@ def main(audio_source='live', filepath=None):
                     else:
                         color = BLUE
                     
-                    if val > 0.8:
+                    # Highlight dominant band
+                    if i == dominant_band:
+                        char = '▓'  # Different char for dominant
+                    elif val > 0.8:
                         char = '█'
                     elif val > 0.6:
                         char = '▆'
@@ -199,9 +206,10 @@ def main(audio_source='live', filepath=None):
                         char = '░'
                     output += f"{color}{char}{RESET}"
                 
-                output += f" ENV:{envelope:.2f}  "
+                # Show dominant freq and tonalness
+                output += f" {dominant_freq:5.0f}Hz T:{tonalness:.2f}  "
             else:
-                output = "Waiting...              "
+                output = "Waiting...                        "
             
             print(output, end='\r', flush=True)
             time.sleep(0.05)
