@@ -14,15 +14,18 @@ CHUNK_SIZE = 1024
 AUDIO_OUTPUT_DEVICE = "hw:1,0"  # Headphones output (Raspberry Pi), survives reboots
 AUDIO_INPUT_DEVICE = 1  # Focusrite 2i2 USB (from sounddevice.query_devices())
 
-# Frequency Bands (Hz)
+# Frequency Bands (Hz) - Rebalanced for even contribution
 BASS_LOW = 20
-BASS_HIGH = 200
-MID_LOW = 200
-MID_HIGH = 2000
-HIGH_LOW = 2000
+BASS_HIGH = 250      # Slightly wider for better bass presence
+MID_LOW = 250
+MID_HIGH = 4000      # Wider mid range but less dominant
+HIGH_LOW = 4000
 HIGH_HIGH = 20000
 FREQ_MIN = 20        # Sub-bass floor
 FREQ_MAX = 20000     # Treble ceiling
+
+# Audio Input Scaling
+INPUT_GAIN = 5.0     # Amplify quiet input signals (5x gain)
 
 # Colors (RGB tuples) - mapped to frequency bands
 COLORS = {
@@ -47,6 +50,9 @@ BRIGHTNESS_EXPONENT = 1.5    # Log scaling for brightness (makes quiet moments d
 # Attack/Decay Envelope for brightness (like a synthesizer ADSR)
 ATTACK_TIME = 0.02           # How fast brightness jumps to a new peak (20ms = 1 frame at 60fps)
 DECAY_TIME = 0.15            # How fast brightness falls back down (150ms = smooth falloff)
+
+# Noise Gate (silence if below this threshold)
+NOISE_GATE_THRESHOLD = 0.02   # Mute signals quieter than 2% RMS to kill input noise
 
 # Dominant Frequency Visualization Parameters
 HUE_RANGE = 240              # Red (0°) to Blue (240°) covers bass to treble

@@ -66,10 +66,13 @@ class LEDEffects:
         # Red (0°) for bass, Green (120°) for mid, Blue (240°) for treble
         hue = (bass_norm * 0 + mid_norm * 120 + high_norm * 240) % 360
         
-        # Brightness uses ADSR envelope for immediate attack + smooth decay (like a synthesizer)
-        # The envelope already incorporates volume and transient information
+        # Brightness uses ADSR envelope + volume scaling
+        # Envelope gives responsive peaks, volume gives overall loudness control
         # Apply power law for better perceptual distribution (quiet → very dark, loud → bright)
-        brightness = max(MIN_BRIGHTNESS, envelope ** BRIGHTNESS_EXPONENT)
+        envelope_brightness = envelope ** BRIGHTNESS_EXPONENT
+        volume_brightness = volume ** BRIGHTNESS_EXPONENT
+        # Combine: envelope for dynamics, volume for overall level
+        brightness = max(MIN_BRIGHTNESS, envelope_brightness * 0.7 + volume_brightness * 0.3)
         
         # Build color distribution for each strip with proper edge blending
         # Use the strongest band's energy to control stripe width

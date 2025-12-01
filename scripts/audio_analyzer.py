@@ -16,6 +16,8 @@ from config import (
     DECAY_TIME,
     FREQ_MIN,
     FREQ_MAX,
+    INPUT_GAIN,
+    NOISE_GATE_THRESHOLD,
 )
 
 
@@ -36,7 +38,7 @@ class AudioAnalyzer:
         self.bass_max = 0.1
         self.mid_max = 0.1
         self.high_max = 0.1
-        self.decay_rate = 0.85  # Fast decay (was 0.95, then 0.92) - let peaks drop quickly
+        self.decay_rate = 0.70  # Very fast decay - kills noise floor quickly
         self.prev_raw_volume = 0.0  # For transient detection
         
         # Attack/Decay envelope state (for brightness envelope)
@@ -58,8 +60,16 @@ class AudioAnalyzer:
         else:
             audio = audio_chunk.astype(np.float32)
 
-        # Calculate RMS volume
+        # Apply input gain to boost quiet signals
+        audio = audio * INPUT_GAIN
+        
+        # Calculate RMS volume (before clipping)
         volume = np.sqrt(np.mean(audio**2))
+        
+        # Apply noise gate - kill signals below threshold
+        if volume < NOISE_GATE_THRESHOLD:
+            volume = 0.0
+            audio = np.zeros_like(audio)
 
         # FFT analysis
         fft = np.abs(np.fft.rfft(audio))
