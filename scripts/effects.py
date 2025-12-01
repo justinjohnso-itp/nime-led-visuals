@@ -69,10 +69,11 @@ class LEDEffects:
         # Brightness uses ADSR envelope + volume scaling
         # Envelope gives responsive peaks, volume gives overall loudness control
         # Apply power law for better perceptual distribution (quiet → very dark, loud → bright)
-        envelope_brightness = envelope ** BRIGHTNESS_EXPONENT
-        volume_brightness = volume ** BRIGHTNESS_EXPONENT
+        envelope_brightness = np.clip(envelope, 0, 1) ** BRIGHTNESS_EXPONENT
+        volume_brightness = np.clip(volume, 0, 1) ** BRIGHTNESS_EXPONENT
         # Combine: envelope for dynamics, volume for overall level
         brightness = max(MIN_BRIGHTNESS, envelope_brightness * 0.7 + volume_brightness * 0.3)
+        brightness = np.clip(brightness, 0, 1)  # Ensure 0-1 range for RGB conversion
         
         # Build color distribution for each strip with proper edge blending
         # Use the strongest band's energy to control stripe width
