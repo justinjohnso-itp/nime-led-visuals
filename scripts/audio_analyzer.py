@@ -28,7 +28,7 @@ class AudioAnalyzer:
         self.bass_max = 0.1
         self.mid_max = 0.1
         self.high_max = 0.1
-        self.decay_rate = 0.98  # Slowly decay max values
+        self.decay_rate = 0.95  # Faster decay for snappier response
 
     def analyze(self, audio_chunk):
         """Analyze audio chunk and return features

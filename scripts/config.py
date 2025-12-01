@@ -3,7 +3,7 @@
 # LED Configuration
 NUM_LEDS_PER_STRIP = 144
 NUM_STRIPS = 3
-LED_BRIGHTNESS = 0.3  # 30% to save power
+LED_BRIGHTNESS = 1.0  # 100% for testing (reduce to 0.3 once confirmed working)
 
 # GPIO Pin (BCM numbering)
 GPIO_PIN = 18  # All daisy-chained strips on GPIO 18
@@ -39,4 +39,4 @@ COLORS = {
 
 # Effect Settings
 FPS_TARGET = 30
-SMOOTHING_FACTOR = 0.1  # 0.0-1.0, lower = more smoothing
+SMOOTHING_FACTOR = 0.2  # 0.0-1.0, higher = snappier response
