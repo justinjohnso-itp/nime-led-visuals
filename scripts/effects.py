@@ -58,10 +58,10 @@ class LEDEffects:
             # Fallback to legacy
             spectrum = np.zeros(32)
         
-        # Sum energy in frequency regions (smooth blending)
-        bass_energy = float(np.sum(spectrum[0:8]))      # 20-200 Hz (red)
-        mid_energy = float(np.sum(spectrum[8:16]))      # 200-1.5k Hz (amber)
-        treble_energy = float(np.sum(spectrum[16:32]))  # 1.5k-20k Hz (blue edges)
+        # Average energy in frequency regions (not sum - keeps values 0-1)
+        bass_energy = float(np.mean(spectrum[0:8]))      # 20-200 Hz (red)
+        mid_energy = float(np.mean(spectrum[8:16]))      # 200-1.5k Hz (amber)
+        treble_energy = float(np.mean(spectrum[16:32]))  # 1.5k-20k Hz (blue edges)
         
         # Core color: weighted blend of red (0°) and amber (30°)
         core_total = bass_energy + mid_energy + 0.001
@@ -72,8 +72,8 @@ class LEDEffects:
         # Brightness from envelope
         target_brightness = max(MIN_BRIGHTNESS, envelope ** BRIGHTNESS_EXPONENT)
         
-        # Edge intensity from treble - more dynamic range via contrast, not sensitivity
-        target_edge = min(1.0, treble_energy / 4.0)  # Less sensitive (need more treble to trigger)
+        # Edge intensity from treble (now 0-1 range since we use mean)
+        target_edge = treble_energy  # Direct mapping, already 0-1
         
         # Smoothing
         attack = 0.7
