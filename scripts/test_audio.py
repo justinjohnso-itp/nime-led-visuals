@@ -13,7 +13,10 @@ from config import SAMPLE_RATE, CHUNK_SIZE
 def main(filepath):
     print(f"Analyzing: {filepath}\n")
 
-    # Start audio playback in background
+    audio = get_audio_input(source="file", filepath=filepath, sample_rate=SAMPLE_RATE, chunk_size=CHUNK_SIZE)
+    analyzer = AudioAnalyzer(sample_rate=SAMPLE_RATE)
+
+    # Start audio playback in background AFTER loading
     try:
         if platform.system() == 'Darwin':
             subprocess.Popen(['afplay', filepath], stderr=subprocess.DEVNULL)
@@ -22,9 +25,6 @@ def main(filepath):
         print("Playing audio...\n")
     except Exception as e:
         print(f"⚠️  Audio playback unavailable: {e}\n")
-
-    audio = get_audio_input(source="file", filepath=filepath, sample_rate=SAMPLE_RATE, chunk_size=CHUNK_SIZE)
-    analyzer = AudioAnalyzer(sample_rate=SAMPLE_RATE)
 
     # Collect statistics
     volumes = []
