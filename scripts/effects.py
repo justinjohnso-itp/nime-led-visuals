@@ -5,7 +5,8 @@ import numpy as np
 from config import (
     COLORS, NUM_LEDS_PER_STRIP, NUM_STRIPS,
     HUE_RANGE, EDGE_HUE_SHIFT, CORE_FRACTION_MIN, CORE_FRACTION_MAX,
-    MIN_BRIGHTNESS, EDGE_FADE_RATE, TRANSIENT_BOOST, BRIGHTNESS_EXPONENT, FREQ_BANDS
+    MIN_BRIGHTNESS, EDGE_FADE_RATE, TRANSIENT_BOOST, BRIGHTNESS_EXPONENT, FREQ_BANDS,
+    BASS_CENTER_FRACTION
 )
 
 
@@ -140,10 +141,21 @@ class LEDEffects:
             pos = i / NUM_LEDS_PER_STRIP  # 0-1 across the strip
             strips[0][i] = get_led_color(pos, is_left_edge=True)
         
-        # Build colors for center strip (no edges, pure core)
+        # Build colors for center strip (no edges, pure core + bass radiance from center)
         for i in range(NUM_LEDS_PER_STRIP):
             pos = i / NUM_LEDS_PER_STRIP
-            strips[1][i] = get_led_color(pos)
+            base_color = get_led_color(pos)
+            
+            # Bass radiance from center: distance from 0.5 determines how much bass bleeds
+            distance_from_center = abs(pos - 0.5) * 2  # 0 at center, 1 at edges
+            bass_radiance = max(0, 1.0 - (distance_from_center / BASS_CENTER_FRACTION))
+            bass_radiance = bass_radiance * bass_energy * brightness  # Scale by bass strength and overall brightness
+            
+            # Blend bass radiance (red hue) with base color
+            # More bass = more red brightness added
+            r, g, b = base_color
+            r = int(np.clip(r + bass_radiance * 255, 0, 255))
+            strips[1][i] = (r, g, b)
         
         # Build colors for right strip (right edge fades secondary, rest = core)
         for i in range(NUM_LEDS_PER_STRIP):
