@@ -3,6 +3,7 @@
 import numpy as np
 from config import (
     SAMPLE_RATE,
+    CHUNK_SIZE,
     BASS_LOW,
     BASS_HIGH,
     MID_LOW,
