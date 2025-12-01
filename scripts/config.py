@@ -74,6 +74,6 @@ HUE_RANGE = 240              # Red (0°) to Blue (240°) covers bass to treble
 EDGE_HUE_SHIFT = 120         # ±120° hue shift at edges (aggressive treble bleed for hi-hats/claps)
 CORE_FRACTION_MIN = 0.2      # Minimum core width (20%, narrower for more edge bleed)
 CORE_FRACTION_MAX = 0.5      # Maximum core width (50%, narrower for more edge bleed)
-MIN_BRIGHTNESS = 0.01        # Even lower floor (nearly off) for maximum contrast
+MIN_BRIGHTNESS = 0.0         # Fully off when silent
 EDGE_FADE_RATE = 0.25        # Brightness fades to 75% at edges for more visible edge bleed
 TRANSIENT_BOOST = 0.5        # Extra brightness boost for sudden volume increases (increased)
