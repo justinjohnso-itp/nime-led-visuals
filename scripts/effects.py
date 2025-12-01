@@ -75,9 +75,9 @@ class LEDEffects:
         # Edge intensity from treble (now 0-1 range since we use mean)
         target_edge = treble_energy  # Direct mapping, already 0-1
         
-        # Smoothing
-        attack = 0.7
-        decay = 0.2
+        # Smoothing - edges are faster for more movement
+        attack = 0.8
+        decay = 0.3
         
         # Hue smoothing
         hue_diff = target_hue - LEDEffects._prev_hue
@@ -99,40 +99,61 @@ class LEDEffects:
         r, g, b = colorsys.hsv_to_rgb(LEDEffects._prev_hue / 360.0, 1.0, LEDEffects._prev_brightness)
         core_color = (int(r * 255), int(g * 255), int(b * 255))
         
-        # Edge color (blue) - steep curve for dynamic range (quiet=dim, loud=bright)
-        edge_brightness = LEDEffects._prev_edge ** 2.0  # Squared for high contrast
-        er, eg, eb = colorsys.hsv_to_rgb(240.0 / 360.0, 1.0, edge_brightness)
-        edge_color = (int(er * 255), int(eg * 255), int(eb * 255))
+        # Edge parameters
+        edge_intensity = LEDEffects._prev_edge ** 1.5  # Curve for dynamic range
+        edge_size = int(NUM_LEDS_PER_STRIP * 0.6 * LEDEffects._prev_edge)
+        feather_size = max(10, edge_size // 2)  # Gradient zone (at least 10 LEDs)
         
-        # Edge size: up to 60% of strip when treble is maxed
-        edge_leds = int(NUM_LEDS_PER_STRIP * 0.6 * LEDEffects._prev_edge)
-        
-        # Bass core for center strip - red expands from center based on bass energy
+        # Bass core for center strip
         bass_core_size = int(NUM_LEDS_PER_STRIP * 0.5 * (bass_energy / (bass_energy + 0.5)))
         bass_brightness = LEDEffects._prev_brightness
-        br, bg, bb = colorsys.hsv_to_rgb(0.0, 1.0, bass_brightness)  # Pure red
-        bass_core_color = (int(br * 255), int(bg * 255), int(bb * 255))
         
         center = NUM_LEDS_PER_STRIP // 2
         
-        # Fill strips with edge effects
+        # Pre-calculate RGB values
+        cr, cg, cb = colorsys.hsv_to_rgb(LEDEffects._prev_hue / 360.0, 1.0, LEDEffects._prev_brightness)
+        br, bg, bb = colorsys.hsv_to_rgb(0.0, 1.0, bass_brightness)  # Pure red for bass core
+        er, eg, eb = colorsys.hsv_to_rgb(240.0 / 360.0, 1.0, edge_intensity)  # Blue
+        
+        # Fill strips with feathered edge effects
         for i in range(NUM_LEDS_PER_STRIP):
-            # Strip 0: edge at high indices (right side, away from center)
-            if i >= NUM_LEDS_PER_STRIP - edge_leds:
-                strips[0][i] = edge_color
+            # Strip 0: edge at high indices (right side) with gradient
+            dist_from_edge = NUM_LEDS_PER_STRIP - 1 - i  # 0 at right edge
+            if dist_from_edge < edge_size:
+                if dist_from_edge < edge_size - feather_size:
+                    # Solid edge zone
+                    blend = 1.0
+                else:
+                    # Feather zone - gradient blend
+                    blend = 1.0 - ((dist_from_edge - (edge_size - feather_size)) / feather_size)
+                blend = blend * edge_intensity
+                # Blend blue over core
+                r = int(cr * 255 * (1 - blend) + er * 255 * blend)
+                g = int(cg * 255 * (1 - blend) + eg * 255 * blend)
+                b = int(cb * 255 * (1 - blend) + eb * 255 * blend)
+                strips[0][i] = (r, g, b)
             else:
                 strips[0][i] = core_color
             
-            # Strip 1: bass core from center, else core color
+            # Strip 1: bass core from center
             dist_from_center = abs(i - center)
             if dist_from_center < bass_core_size:
-                strips[1][i] = bass_core_color
+                strips[1][i] = (int(br * 255), int(bg * 255), int(bb * 255))
             else:
                 strips[1][i] = core_color
             
-            # Strip 2: edge at low indices (left side, away from center)
-            if i < edge_leds:
-                strips[2][i] = edge_color
+            # Strip 2: edge at low indices (left side) with gradient
+            dist_from_edge = i  # 0 at left edge
+            if dist_from_edge < edge_size:
+                if dist_from_edge < edge_size - feather_size:
+                    blend = 1.0
+                else:
+                    blend = 1.0 - ((dist_from_edge - (edge_size - feather_size)) / feather_size)
+                blend = blend * edge_intensity
+                r = int(cr * 255 * (1 - blend) + er * 255 * blend)
+                g = int(cg * 255 * (1 - blend) + eg * 255 * blend)
+                b = int(cb * 255 * (1 - blend) + eb * 255 * blend)
+                strips[2][i] = (r, g, b)
             else:
                 strips[2][i] = core_color
 

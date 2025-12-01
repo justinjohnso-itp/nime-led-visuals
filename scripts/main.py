@@ -136,12 +136,14 @@ def main(audio_source='live', filepath=None):
         'centroid': 0.0,
         'bandwidth': 0.0,
         'transient': 0.0,
-        'envelope': 0.0
+        'envelope': 0.0,
+        'spectrum': None,  # 32-band spectrum
     }
     stop_event = threading.Event()
 
     print("▶️  Starting audio-reactive visualization...")
     print("   Press Ctrl+C to stop")
+    print()  # Extra line for spectrum display
 
     # Start audio thread (continuous reading)
     audio_t = threading.Thread(
@@ -165,45 +167,61 @@ def main(audio_source='live', filepath=None):
     # Main thread: print features and handle shutdown
     try:
         while True:
-            # Create ASCII spectrum visualizer with 5 bands
-            sub_bass = shared_features['sub_bass']
-            bass = shared_features['bass']
-            low_mid = shared_features['low_mid']
-            mid_high = shared_features['mid_high']
-            treble = shared_features['treble']
-            transient = shared_features['transient']
-            volume = shared_features['volume']
+            spectrum = shared_features.get('spectrum', None)
             envelope = shared_features['envelope']
+            volume = shared_features['volume']
             
-            # Create bars (6 chars per band, fixed width, colored)
-            bar_width = 6
+            # ANSI colors matching our stage palette
             RED = '\033[91m'
             ORANGE = '\033[33m'
-            GREEN = '\033[92m'
             BLUE = '\033[94m'
+            DIM = '\033[2m'
             RESET = '\033[0m'
             
-            # Colored bars with monospace █
-            sub_bass_bar = f"{RED}{'█' * int(sub_bass * bar_width)}{RESET}" + ' ' * (bar_width - int(sub_bass * bar_width))
-            bass_bar = f"{RED}{'█' * int(bass * bar_width)}{RESET}" + ' ' * (bar_width - int(bass * bar_width))
-            low_mid_bar = f"{ORANGE}{'█' * int(low_mid * bar_width)}{RESET}" + ' ' * (bar_width - int(low_mid * bar_width))
-            mid_high_bar = f"{GREEN}{'█' * int(mid_high * bar_width)}{RESET}" + ' ' * (bar_width - int(mid_high * bar_width))
-            treble_bar = f"{BLUE}{'█' * int(treble * bar_width)}{RESET}" + ' ' * (bar_width - int(treble * bar_width))
+            if spectrum is not None and len(spectrum) >= 32:
+                # 32-band spectrum display - grouped into bass/mid/treble
+                bass_energy = float(np.mean(spectrum[0:8]))      # Red
+                mid_energy = float(np.mean(spectrum[8:16]))      # Amber
+                treble_energy = float(np.mean(spectrum[16:32]))  # Blue
+                
+                # Create compact spectrum bars
+                bar_width = 10
+                bass_bar = f"{RED}{'█' * int(bass_energy * bar_width)}{RESET}" + '░' * (bar_width - int(bass_energy * bar_width))
+                mid_bar = f"{ORANGE}{'█' * int(mid_energy * bar_width)}{RESET}" + '░' * (bar_width - int(mid_energy * bar_width))
+                treble_bar = f"{BLUE}{'█' * int(treble_energy * bar_width)}{RESET}" + '░' * (bar_width - int(treble_energy * bar_width))
+                
+                # Mini 32-band spectrum visualization
+                spectrum_chars = ""
+                for i, val in enumerate(spectrum):
+                    if i < 8:
+                        color = RED
+                    elif i < 16:
+                        color = ORANGE
+                    else:
+                        color = BLUE
+                    
+                    # Use block height characters
+                    if val > 0.75:
+                        char = '█'
+                    elif val > 0.5:
+                        char = '▆'
+                    elif val > 0.25:
+                        char = '▄'
+                    elif val > 0.1:
+                        char = '▂'
+                    else:
+                        char = '░'
+                    spectrum_chars += f"{color}{char}{RESET}"
+                
+                output = f"BASS[{bass_bar}] MID[{mid_bar}] TRE[{treble_bar}] ENV:{envelope:.2f} "
+                output += f"\n{spectrum_chars}"
+                output += " " * 10
+            else:
+                output = f"Waiting for spectrum... VOL:{volume:.2f} ENV:{envelope:.2f}"
+                output += " " * 40
             
-            # Transient indicator
-            transient_char = '⚡' if transient > 0.05 else ' '
-            
-            # Create the display with fixed widths (all on one line)
-            output = f"SUB [{sub_bass_bar}] "
-            output += f"BASS [{bass_bar}] "
-            output += f"L-MID [{low_mid_bar}] "
-            output += f"M-HI [{mid_high_bar}] "
-            output += f"TRE [{treble_bar}] "
-            output += f"VOL:{volume:.2f} ENV:{envelope:.2f} {transient_char}"
-            output += " " * 20  # Padding to clear previous output
-            
-            print(output, end='\r')
-            time.sleep(0.1)  # Update display every 100ms
+            print(f"\033[2A{output}", end='\r', flush=True)  # Move up 2 lines and overwrite
+            time.sleep(0.05)  # 20 FPS display
 
     except KeyboardInterrupt:
         print("\n⏹️  Stopping...")
