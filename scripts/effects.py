@@ -58,11 +58,13 @@ class LEDEffects:
         # Determine hue based on which band is strongest (most energy)
         # This creates a natural color shift: bass=red, mid=green, treble=blue
         # Boost bass weight so it's more likely to show through (4x multiplier)
+        # Also boost treble so hi-hats/claps edge colors are visible (2x multiplier)
         weighted_bass = bass * 4.0
-        total_energy = weighted_bass + mid + high + 0.001  # Avoid division by zero
+        weighted_high = high * 2.0
+        total_energy = weighted_bass + mid + weighted_high + 0.001  # Avoid division by zero
         bass_norm = weighted_bass / total_energy
         mid_norm = mid / total_energy
-        high_norm = high / total_energy
+        high_norm = weighted_high / total_energy
         
         # Map band dominance to hue (0-360°)
         # Red (0°) for bass, Green (120°) for mid, Blue (240°) for treble
