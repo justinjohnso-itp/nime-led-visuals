@@ -85,6 +85,10 @@ class AudioAnalyzer:
         # Accumulate in buffer
         self.audio_buffer = np.concatenate([self.audio_buffer, audio])
         
+        # Debug: log buffer status every ~1 second (43 chunks)
+        if len(self.audio_buffer) % (CHUNK_SIZE * 43) < CHUNK_SIZE:
+            print(f"  Buffer: {len(self.audio_buffer)}/{self.min_buffer_size} samples, volume={volume:.3f}, gate={NOISE_GATE_THRESHOLD}")
+        
         # Only analyze when we have enough buffered samples
         if len(self.audio_buffer) < self.min_buffer_size:
             # Return empty features while building buffer
