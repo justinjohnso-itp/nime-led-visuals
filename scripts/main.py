@@ -131,7 +131,8 @@ def main(audio_source='live', filepath=None):
         'high': 0.0,
         'centroid': 0.0,
         'bandwidth': 0.0,
-        'transient': 0.0
+        'transient': 0.0,
+        'envelope': 0.0
     }
     stop_event = threading.Event()
 
@@ -160,9 +161,30 @@ def main(audio_source='live', filepath=None):
     # Main thread: print features and handle shutdown
     try:
         while True:
-            # Print current features for monitoring
-            centroid_hz = 20 * (20000 / 20) ** shared_features['centroid']  # Convert back to Hz approximation
-            print(f"Vol: {shared_features['volume']:.2f} | Centroid: {centroid_hz:6.0f}Hz | BW: {shared_features['bandwidth']:.2f}", end='\r')
+            # Create ASCII spectrum visualizer
+            bass = shared_features['bass']
+            mid = shared_features['mid']
+            high = shared_features['high']
+            transient = shared_features['transient']
+            volume = shared_features['volume']
+            envelope = shared_features['envelope']
+            
+            # Create bars (10 chars max per band)
+            bar_width = 10
+            bass_bar = '█' * int(bass * bar_width)
+            mid_bar = '█' * int(mid * bar_width)
+            high_bar = '█' * int(high * bar_width)
+            
+            # Transient indicator (flash when detected)
+            transient_char = '⚡' if transient > 0.2 else ' '
+            
+            # Create the display
+            output = f"BASS  [{bass_bar:<{bar_width}}] {bass:5.2f}  "
+            output += f"MID   [{mid_bar:<{bar_width}}] {mid:5.2f}  "
+            output += f"TREBLE [{high_bar:<{bar_width}}] {high:5.2f}  "
+            output += f"VOL:{volume:.2f} ENV:{envelope:.2f} {transient_char}"
+            
+            print(output, end='\r')
             time.sleep(0.1)  # Update display every 100ms
 
     except KeyboardInterrupt:

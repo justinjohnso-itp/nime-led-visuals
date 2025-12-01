@@ -50,6 +50,7 @@ class LEDEffects:
         high = features.get('high', 0.0)       # 2k-20k Hz
         volume = features.get('volume', 0.0)
         transient = features.get('transient', 0.0)  # Sudden volume increase
+        envelope = features.get('envelope', 0.0)  # ADSR brightness envelope (replaces raw volume)
         
         # Total LED count across all strips
         total_leds = NUM_LEDS_PER_STRIP * NUM_STRIPS
@@ -65,11 +66,10 @@ class LEDEffects:
         # Red (0°) for bass, Green (120°) for mid, Blue (240°) for treble
         hue = (bass_norm * 0 + mid_norm * 120 + high_norm * 240) % 360
         
-        # Brightness follows volume with logarithmic scaling for better dynamic range
-        # Transient boost amplified for punchy response to musical events
-        raw_brightness = volume + (transient * TRANSIENT_BOOST)
+        # Brightness uses ADSR envelope for immediate attack + smooth decay (like a synthesizer)
+        # The envelope already incorporates volume and transient information
         # Apply power law for better perceptual distribution (quiet → very dark, loud → bright)
-        brightness = max(MIN_BRIGHTNESS, raw_brightness ** BRIGHTNESS_EXPONENT)
+        brightness = max(MIN_BRIGHTNESS, envelope ** BRIGHTNESS_EXPONENT)
         
         # Build color distribution across all LEDs
         # Use the strongest band's energy to control stripe width
@@ -112,17 +112,18 @@ class LEDEffects:
             color = (int(r * 255), int(g * 255), int(b * 255))
             led_colors.append(color)
         
-        # Mirror the entire color array for symmetric edge blending across all three strips
-        # Left strip gets reversed colors (mirror of right), center is core, right is core
-        left_colors = list(reversed(led_colors[:NUM_LEDS_PER_STRIP]))
-        center_colors = led_colors[NUM_LEDS_PER_STRIP:2*NUM_LEDS_PER_STRIP]
-        right_colors = led_colors[2*NUM_LEDS_PER_STRIP:3*NUM_LEDS_PER_STRIP]
-        
-        # Distribute mirrored colors across three strips
+        # Distribute colors symmetrically: left edge blends secondary → core → right edge blends secondary
+        # This creates a mirror effect where edges show adjacent frequencies
         for i in range(NUM_LEDS_PER_STRIP):
-            strips[0][i] = left_colors[i]      # Left (mirrored)
-            strips[1][i] = center_colors[i]    # Center (core)
-            strips[2][i] = right_colors[i]     # Right (core)
+            # Left strip: mirrored (reversed), so left edge (index 0) shows the fade like right edge
+            left_idx = NUM_LEDS_PER_STRIP - 1 - i
+            strips[0][i] = led_colors[left_idx]
+            
+            # Center strip: pure core
+            strips[1][i] = led_colors[NUM_LEDS_PER_STRIP + i]
+            
+            # Right strip: normal order
+            strips[2][i] = led_colors[2*NUM_LEDS_PER_STRIP + i]
 
     @staticmethod
     def pulse_effect(strip, volume, color=(255, 255, 255)):

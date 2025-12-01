@@ -11,6 +11,8 @@ from config import (
     HIGH_HIGH,
     SMOOTHING_FACTOR,
     BRIGHTNESS_EXPONENT,
+    ATTACK_TIME,
+    DECAY_TIME,
     FREQ_MIN,
     FREQ_MAX,
 )
@@ -31,8 +33,13 @@ class AudioAnalyzer:
         self.prev_bandwidth = 0.0
         # Global max for all-band normalization (creates color contrast)
         self.bass_max = 0.1  # Tracks the global peak
-        self.decay_rate = 0.95  # Faster decay for snappier response
+        self.decay_rate = 0.92  # Even faster decay for punchier response (0.92 vs 0.95)
         self.prev_raw_volume = 0.0  # For transient detection
+        
+        # Attack/Decay envelope state (for brightness envelope)
+        self.envelope_value = 0.0  # Current brightness envelope (0-1)
+        self.target_envelope = 0.0  # Target brightness (what we're trying to reach)
+        self.samples_per_chunk = sample_rate * SAMPLE_RATE / 44100  # Normalize to audio sample rate
 
     def analyze(self, audio_chunk):
         """Analyze audio chunk and return features
@@ -105,6 +112,23 @@ class AudioAnalyzer:
         transient = max(0, volume - self.prev_raw_volume)
         self.prev_raw_volume = volume
         
+        # Apply ADSR envelope to brightness for "punchy" response
+        # Target is the current volume with transient boost
+        self.target_envelope = volume + (transient * 1.0)
+        
+        # Attack: jump up quickly to new peaks (20ms = nearly instant)
+        # Decay: fall back down smoothly (150ms = natural release)
+        if self.target_envelope > self.envelope_value:
+            # Attack phase: quick rise
+            attack_coeff = ATTACK_TIME / max(ATTACK_TIME, 0.001)
+            self.envelope_value += (self.target_envelope - self.envelope_value) * attack_coeff
+        else:
+            # Decay phase: smooth fall
+            decay_coeff = 1.0 - (DECAY_TIME / max(DECAY_TIME, 0.001))
+            self.envelope_value = self.envelope_value * decay_coeff + self.target_envelope * (1 - decay_coeff)
+        
+        self.envelope_value = np.clip(self.envelope_value, 0, 1)
+        
         return {
             "volume": volume,
             "bass": bass_norm,
@@ -113,6 +137,7 @@ class AudioAnalyzer:
             "centroid": centroid,  # Normalized to 0-1 (Hz to 0-1 range)
             "bandwidth": bandwidth,  # Normalized to 0-1
             "transient": transient,  # 0-1, higher = sudden loud event
+            "envelope": self.envelope_value,  # ADSR brightness envelope
         }
 
     def _get_band_energy(self, fft, freqs, low_freq, high_freq):

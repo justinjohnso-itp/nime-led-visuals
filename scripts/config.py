@@ -41,8 +41,12 @@ COLORS = {
 
 # Effect Settings
 FPS_TARGET = 60              # Increased from 30 for smoother animation
-SMOOTHING_FACTOR = 0.02      # 0.0-1.0, lowered to 0.02 for very fast responsiveness
+SMOOTHING_FACTOR = 0.008     # Ultra-fast (0.008) - minimal smoothing for snappy response
 BRIGHTNESS_EXPONENT = 1.5    # Log scaling for brightness (makes quiet moments darker, peaks brighter)
+
+# Attack/Decay Envelope for brightness (like a synthesizer ADSR)
+ATTACK_TIME = 0.02           # How fast brightness jumps to a new peak (20ms = 1 frame at 60fps)
+DECAY_TIME = 0.15            # How fast brightness falls back down (150ms = smooth falloff)
 
 # Dominant Frequency Visualization Parameters
 HUE_RANGE = 240              # Red (0°) to Blue (240°) covers bass to treble
