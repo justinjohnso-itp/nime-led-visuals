@@ -57,8 +57,10 @@ class LEDEffects:
         
         # Determine hue based on which band is strongest (most energy)
         # This creates a natural color shift: bass=red, mid=green, treble=blue
-        total_energy = bass + mid + high + 0.001  # Avoid division by zero
-        bass_norm = bass / total_energy
+        # Boost bass weight so it's more likely to show through (2x multiplier)
+        weighted_bass = bass * 2.0
+        total_energy = weighted_bass + mid + high + 0.001  # Avoid division by zero
+        bass_norm = weighted_bass / total_energy
         mid_norm = mid / total_energy
         high_norm = high / total_energy
         
@@ -123,17 +125,17 @@ class LEDEffects:
             r, g, b = colorsys.hsv_to_rgb(current_hue / 360.0, 1.0, brightness * edge_fade)
             return (int(r * 255), int(g * 255), int(b * 255))
         
-        # Build colors for left strip (left edge fades secondary, right = core)
+        # Build colors for left strip (left edge fades secondary, rest = core)
         for i in range(NUM_LEDS_PER_STRIP):
             pos = i / NUM_LEDS_PER_STRIP  # 0-1 across the strip
             strips[0][i] = get_led_color(pos, is_left_edge=True)
         
-        # Build colors for center strip (both edges fade secondary, center = core)
+        # Build colors for center strip (no edges, pure core)
         for i in range(NUM_LEDS_PER_STRIP):
             pos = i / NUM_LEDS_PER_STRIP
-            strips[1][i] = get_led_color(pos, is_left_edge=True, is_right_edge=True)
+            strips[1][i] = get_led_color(pos)
         
-        # Build colors for right strip (left = core, right edge fades secondary)
+        # Build colors for right strip (right edge fades secondary, rest = core)
         for i in range(NUM_LEDS_PER_STRIP):
             pos = i / NUM_LEDS_PER_STRIP
             strips[2][i] = get_led_color(pos, is_right_edge=True)
