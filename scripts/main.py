@@ -169,29 +169,16 @@ def main(audio_source='live', filepath=None):
         while True:
             spectrum = shared_features.get('spectrum', None)
             envelope = shared_features['envelope']
-            volume = shared_features['volume']
             
-            # ANSI colors matching our stage palette
+            # ANSI colors
             RED = '\033[91m'
             ORANGE = '\033[33m'
             BLUE = '\033[94m'
-            DIM = '\033[2m'
             RESET = '\033[0m'
             
             if spectrum is not None and len(spectrum) >= 32:
-                # 32-band spectrum display - grouped into bass/mid/treble
-                bass_energy = float(np.mean(spectrum[0:8]))      # Red
-                mid_energy = float(np.mean(spectrum[8:16]))      # Amber
-                treble_energy = float(np.mean(spectrum[16:32]))  # Blue
-                
-                # Create compact spectrum bars
-                bar_width = 10
-                bass_bar = f"{RED}{'█' * int(bass_energy * bar_width)}{RESET}" + '░' * (bar_width - int(bass_energy * bar_width))
-                mid_bar = f"{ORANGE}{'█' * int(mid_energy * bar_width)}{RESET}" + '░' * (bar_width - int(mid_energy * bar_width))
-                treble_bar = f"{BLUE}{'█' * int(treble_energy * bar_width)}{RESET}" + '░' * (bar_width - int(treble_energy * bar_width))
-                
-                # Mini 32-band spectrum visualization
-                spectrum_chars = ""
+                # 32-band spectrum as single line with height chars
+                output = ""
                 for i, val in enumerate(spectrum):
                     if i < 8:
                         color = RED
@@ -200,28 +187,24 @@ def main(audio_source='live', filepath=None):
                     else:
                         color = BLUE
                     
-                    # Use block height characters
-                    if val > 0.75:
+                    if val > 0.8:
                         char = '█'
-                    elif val > 0.5:
+                    elif val > 0.6:
                         char = '▆'
-                    elif val > 0.25:
+                    elif val > 0.4:
                         char = '▄'
-                    elif val > 0.1:
+                    elif val > 0.2:
                         char = '▂'
                     else:
                         char = '░'
-                    spectrum_chars += f"{color}{char}{RESET}"
+                    output += f"{color}{char}{RESET}"
                 
-                output = f"BASS[{bass_bar}] MID[{mid_bar}] TRE[{treble_bar}] ENV:{envelope:.2f} "
-                output += f"\n{spectrum_chars}"
-                output += " " * 10
+                output += f" ENV:{envelope:.2f}  "
             else:
-                output = f"Waiting for spectrum... VOL:{volume:.2f} ENV:{envelope:.2f}"
-                output += " " * 40
+                output = "Waiting...              "
             
-            print(f"\033[2A{output}", end='\r', flush=True)  # Move up 2 lines and overwrite
-            time.sleep(0.05)  # 20 FPS display
+            print(output, end='\r', flush=True)
+            time.sleep(0.05)
 
     except KeyboardInterrupt:
         print("\n⏹️  Stopping...")
