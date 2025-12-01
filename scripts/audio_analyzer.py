@@ -29,10 +29,8 @@ class AudioAnalyzer:
         self.prev_high = 0.0
         self.prev_centroid = 0.0
         self.prev_bandwidth = 0.0
-        # Running max for per-band normalization
-        self.bass_max = 0.1
-        self.mid_max = 0.1
-        self.high_max = 0.1
+        # Global max for all-band normalization (creates color contrast)
+        self.bass_max = 0.1  # Tracks the global peak
         self.decay_rate = 0.95  # Faster decay for snappier response
         self.prev_raw_volume = 0.0  # For transient detection
 
@@ -68,15 +66,16 @@ class AudioAnalyzer:
         mid = np.log10(mid + 1)
         high = np.log10(high + 1)
 
-        # Update running max for each band (adaptive peak detection)
-        self.bass_max = max(bass, self.bass_max * self.decay_rate)
-        self.mid_max = max(mid, self.mid_max * self.decay_rate)
-        self.high_max = max(high, self.high_max * self.decay_rate)
+        # Update running global max across ALL bands (not per-band)
+        # This creates more contrast: when bass hits, it's clearly bass-dominant
+        global_max = max(bass, mid, high)
+        self.bass_max = max(global_max, self.bass_max * self.decay_rate)
 
-        # Normalize each band independently by its own max
+        # Normalize all bands by the SAME global max for dynamic color shifts
+        # This way, bass hits show RED clearly, treble peaks show BLUE
         bass_norm = bass / max(self.bass_max, 0.01)
-        mid_norm = mid / max(self.mid_max, 0.01)
-        high_norm = high / max(self.high_max, 0.01)
+        mid_norm = mid / max(self.bass_max, 0.01)
+        high_norm = high / max(self.bass_max, 0.01)
         
         # Clip to 0-1 range
         bass_norm = np.clip(bass_norm, 0, 1)
