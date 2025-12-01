@@ -11,7 +11,7 @@ GPIO_PIN = 18  # All daisy-chained strips on GPIO 18
 # Audio Configuration
 SAMPLE_RATE = 44100
 CHUNK_SIZE = 1024
-AUDIO_DEVICE = "default"  # ALSA device (configured in ~/.asoundrc), or None for system default
+AUDIO_DEVICE = "hw:1,0"  # Headphones output (Raspberry Pi), survives reboots
 
 # Frequency Bands (Hz)
 BASS_LOW = 20
