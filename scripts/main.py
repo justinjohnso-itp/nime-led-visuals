@@ -175,8 +175,8 @@ def main(audio_source='live', filepath=None):
             mid_bar = '█' * int(mid * bar_width)
             high_bar = '█' * int(high * bar_width)
             
-            # Transient indicator (flash when detected)
-            transient_char = '⚡' if transient > 0.2 else ' '
+            # Transient indicator (flash when detected - very sensitive now)
+            transient_char = '⚡' if transient > 0.05 else ' '
             
             # Create the display
             output = f"BASS  [{bass_bar:<{bar_width}}] {bass:5.2f}  "

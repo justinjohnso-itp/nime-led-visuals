@@ -31,15 +31,16 @@ class AudioAnalyzer:
         self.prev_high = 0.0
         self.prev_centroid = 0.0
         self.prev_bandwidth = 0.0
-        # Global max for all-band normalization (creates color contrast)
-        self.bass_max = 0.1  # Tracks the global peak
-        self.decay_rate = 0.92  # Even faster decay for punchier response (0.92 vs 0.95)
+        # Per-band peak tracking (independent normalization for each band)
+        self.bass_max = 0.1
+        self.mid_max = 0.1
+        self.high_max = 0.1
+        self.decay_rate = 0.85  # Fast decay (was 0.95, then 0.92) - let peaks drop quickly
         self.prev_raw_volume = 0.0  # For transient detection
         
         # Attack/Decay envelope state (for brightness envelope)
         self.envelope_value = 0.0  # Current brightness envelope (0-1)
         self.target_envelope = 0.0  # Target brightness (what we're trying to reach)
-        self.samples_per_chunk = sample_rate * SAMPLE_RATE / 44100  # Normalize to audio sample rate
 
     def analyze(self, audio_chunk):
         """Analyze audio chunk and return features
@@ -63,26 +64,21 @@ class AudioAnalyzer:
         fft = np.abs(np.fft.rfft(audio))
         freqs = np.fft.rfftfreq(len(audio), 1 / self.sample_rate)
 
-        # Extract frequency bands
+        # Extract frequency bands (no log scaling - keep it raw and responsive)
         bass = self._get_band_energy(fft, freqs, BASS_LOW, BASS_HIGH)
         mid = self._get_band_energy(fft, freqs, MID_LOW, MID_HIGH)
         high = self._get_band_energy(fft, freqs, HIGH_LOW, HIGH_HIGH)
 
-        # Apply log scaling to compress high values
-        bass = np.log10(bass + 1)
-        mid = np.log10(mid + 1)
-        high = np.log10(high + 1)
+        # Update running max for EACH band independently (allows all bands to shine)
+        self.bass_max = max(bass, self.bass_max * self.decay_rate)
+        self.mid_max = max(mid, self.mid_max * self.decay_rate)
+        self.high_max = max(high, self.high_max * self.decay_rate)
 
-        # Update running global max across ALL bands (not per-band)
-        # This creates more contrast: when bass hits, it's clearly bass-dominant
-        global_max = max(bass, mid, high)
-        self.bass_max = max(global_max, self.bass_max * self.decay_rate)
-
-        # Normalize all bands by the SAME global max for dynamic color shifts
-        # This way, bass hits show RED clearly, treble peaks show BLUE
-        bass_norm = bass / max(self.bass_max, 0.01)
-        mid_norm = mid / max(self.bass_max, 0.01)
-        high_norm = high / max(self.bass_max, 0.01)
+        # Normalize each band by its OWN max (per-band normalization)
+        # This lets treble peaks show as bright blue, bass as red, mid as green
+        bass_norm = bass / max(self.bass_max, 0.001)
+        mid_norm = mid / max(self.mid_max, 0.001)
+        high_norm = high / max(self.high_max, 0.001)
         
         # Clip to 0-1 range
         bass_norm = np.clip(bass_norm, 0, 1)
@@ -92,15 +88,9 @@ class AudioAnalyzer:
         # Calculate spectral centroid (dominant frequency) and bandwidth
         centroid, bandwidth = self._calculate_spectral_features(fft, freqs)
 
-        # Apply smoothing to prevent flickering
-        volume = self._smooth(volume, self.prev_volume)
-        bass_norm = self._smooth(bass_norm, self.prev_bass)
-        mid_norm = self._smooth(mid_norm, self.prev_mid)
-        high_norm = self._smooth(high_norm, self.prev_high)
-        centroid = self._smooth(centroid, self.prev_centroid)
-        bandwidth = self._smooth(bandwidth, self.prev_bandwidth)
-
-        # Store for next smoothing
+        # NO SMOOTHING on features - just raw data straight to LED
+        # (Only smooth the envelope, not the analysis)
+        # Store raw values for transient detection
         self.prev_volume = volume
         self.prev_bass = bass_norm
         self.prev_mid = mid_norm
@@ -108,13 +98,19 @@ class AudioAnalyzer:
         self.prev_centroid = centroid
         self.prev_bandwidth = bandwidth
 
-        # Detect transients (sudden volume increase = musical event)
-        transient = max(0, volume - self.prev_raw_volume)
-        self.prev_raw_volume = volume
+        # Detect transients: relative change in energy (not absolute)
+        # Use the sum of all bands as a better indicator than just volume RMS
+        total_energy = bass + mid + high
+        energy_change = total_energy - self.prev_raw_volume
+        
+        # Transient is any sudden increase (but not overly sensitive)
+        transient = max(0, energy_change) / max(total_energy, 0.001)  # Normalized by current energy
+        transient = np.clip(transient, 0, 1)
+        self.prev_raw_volume = total_energy
         
         # Apply ADSR envelope to brightness for "punchy" response
-        # Target is the current volume with transient boost
-        self.target_envelope = volume + (transient * 1.0)
+        # Target is envelope that responds to transients immediately
+        self.target_envelope = envelope_val = max(bass_norm, mid_norm, high_norm)  # Peak of any band
         
         # Attack: jump up quickly to new peaks (20ms = nearly instant)
         # Decay: fall back down smoothly (150ms = natural release)
