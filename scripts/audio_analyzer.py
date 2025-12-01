@@ -118,25 +118,29 @@ class AudioAnalyzer:
             print(f"Melspectrogram error: {e}")
             return self._empty_features()
         
-        # Drop first chunk from buffer (to avoid re-analyzing same data next iteration)
-        self.audio_buffer = self.audio_buffer[CHUNK_SIZE:]
-        
-        # Handle empty spectrogram
-        if mel_spec.shape[1] == 0:
+        # Validate mel-spectrogram output shape
+        if mel_spec.ndim != 2 or mel_spec.shape[0] != 128 or mel_spec.shape[1] < 1:
             return self._empty_features()
         
-        # Convert power spectrum to dB scale
-        mel_db = librosa.power_to_db(mel_spec, ref=np.max)
+        # Drop analyzed samples from buffer: use hop_length not CHUNK_SIZE
+        # Each analysis frame advances by hop_length (512) samples
+        # We analyzed int(mel_spec.shape[1]) frames, so we advanced by that many hops
+        hops_analyzed = mel_spec.shape[1]
+        samples_analyzed = hops_analyzed * 512  # hop_length
+        # Don't drop more than we have
+        samples_to_drop = min(samples_analyzed, len(self.audio_buffer))
+        self.audio_buffer = self.audio_buffer[samples_to_drop:]
         
-        # Handle NaN/inf values
-        mel_db = np.nan_to_num(mel_db, nan=-80.0, posinf=0.0, neginf=-80.0)
+        # Aggregate energy across ALL frames (not just latest) for stability
+        # This reduces jitter from single-frame noise spikes
+        mel_power = mel_spec  # Already in power scale (power=2.0)
         
-        # Extract energy from latest frame (rightmost column = most recent audio)
-        latest_frame_db = mel_db[:, -1]  # Last frame
+        # Average across time axis (all frames) for smoother energy measurement
+        # Use median for robustness to outliers, or mean for responsiveness
+        mel_linear = np.mean(mel_power, axis=1)  # Average across time: shape (128,)
         
-        # Convert dB back to linear for band energy calculation
-        latest_frame_linear = librosa.db_to_power(latest_frame_db)
-        latest_frame_linear = np.nan_to_num(latest_frame_linear, nan=0.0, posinf=0.0, neginf=0.0)
+        # Avoid log(0) by clipping very small values
+        mel_linear = np.clip(mel_linear, 1e-10, None)
         
         # Map mel-bands to our 5 frequency bands
         # Librosa provides mel_frequencies() to know which Hz each mel-band represents
@@ -157,13 +161,16 @@ class AudioAnalyzer:
         
         for band_name, (freq_low, freq_high) in band_ranges.items():
             # Find mel-bands in this frequency range
-            mask = (mel_freqs >= freq_low) & (mel_freqs < freq_high)
+            # Use inclusive upper bound for last band to avoid losing high-freq energy
+            if band_name == 'treble':
+                mask = (mel_freqs >= freq_low) & (mel_freqs <= freq_high)
+            else:
+                mask = (mel_freqs >= freq_low) & (mel_freqs < freq_high)
             
             if np.any(mask):
-                # Sum energy in this band
-                energy = np.sum(latest_frame_linear[mask])
-                # Normalize by number of mel-bands (so bands of different widths are comparable)
-                energy = energy / np.sum(mask)
+                # Average energy in this band (not sum) to handle variable-width bands
+                # This accounts for mel-bands being logarithmically spaced
+                energy = np.mean(mel_linear[mask])
             else:
                 energy = 0.0
             
@@ -183,13 +190,14 @@ class AudioAnalyzer:
         
         # Calculate spectral centroid on mel-scale
         # (which frequencies are active?)
-        energy_weighted = latest_frame_linear * mel_freqs
-        centroid_hz = np.sum(energy_weighted) / (np.sum(latest_frame_linear) + 1e-10)
+        energy_weighted = mel_linear * mel_freqs
+        total_energy = np.sum(mel_linear) + 1e-10
+        centroid_hz = np.sum(energy_weighted) / total_energy
         centroid_norm = np.log10(max(centroid_hz, FREQ_MIN)) / np.log10(FREQ_MAX)
         centroid_norm = np.clip(centroid_norm, 0, 1)
         
         # Bandwidth: RMS width of frequency distribution
-        variance = np.sum((mel_freqs - centroid_hz) ** 2 * latest_frame_linear) / (np.sum(latest_frame_linear) + 1e-10)
+        variance = np.sum((mel_freqs - centroid_hz) ** 2 * mel_linear) / total_energy
         bandwidth_hz = np.sqrt(variance) if variance > 0 else 0
         bandwidth_norm = np.log10(max(bandwidth_hz, 1)) / np.log10(FREQ_MAX / 4)
         bandwidth_norm = np.clip(bandwidth_norm, 0, 1)
@@ -217,11 +225,13 @@ class AudioAnalyzer:
         
         return {
             "volume": volume,
+            # Legacy 3-band for backward compatibility with effects.py
             "bass": bass,
             "mid": mid,
             "high": high,
+            # All 5 frequency bands
             "sub_bass": band_norms.get('sub_bass', 0.0),
-            "bass": band_norms.get('bass', 0.0),
+            "bass_norm": band_norms.get('bass', 0.0),  # Renamed to avoid key collision
             "low_mid": band_norms.get('low_mid', 0.0),
             "mid_high": band_norms.get('mid_high', 0.0),
             "treble": band_norms.get('treble', 0.0),
