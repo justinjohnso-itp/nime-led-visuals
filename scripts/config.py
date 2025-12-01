@@ -11,6 +11,7 @@ GPIO_PIN = 18  # All daisy-chained strips on GPIO 18
 # Audio Configuration
 SAMPLE_RATE = 44100
 CHUNK_SIZE = 1024
+AUDIO_DEVICE = "Headphones"  # aplay device name (survives reboots), or None for default
 
 # Frequency Bands (Hz)
 BASS_LOW = 20

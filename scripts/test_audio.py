@@ -9,7 +9,7 @@ import subprocess
 import os
 from audio_input import get_audio_input
 from audio_analyzer import AudioAnalyzer
-from config import SAMPLE_RATE, CHUNK_SIZE
+from config import SAMPLE_RATE, CHUNK_SIZE, AUDIO_DEVICE
 
 def main(filepath):
     print(f"Analyzing: {filepath}\n")
@@ -23,8 +23,12 @@ def main(filepath):
             subprocess.Popen(['afplay', filepath])
         elif platform.system() == 'Linux':
             ffmpeg_proc = subprocess.Popen(['ffmpeg', '-i', filepath, '-f', 's16le', '-ar', '44100', '-ac', '2', '-'], 
-                                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            subprocess.Popen(['aplay', '-f', 'S16_LE', '-r', '44100', '-c', '2'], stdin=ffmpeg_proc.stdout, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            aplay_cmd = ['aplay', '-f', 'S16_LE', '-r', '44100', '-c', '2']
+            if AUDIO_DEVICE:
+                aplay_cmd = ['aplay', '-D', AUDIO_DEVICE, '-f', 'S16_LE', '-r', '44100', '-c', '2']
+            aplay_proc = subprocess.Popen(aplay_cmd, 
+                                         stdin=ffmpeg_proc.stdout, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
             ffmpeg_proc.stdout.close()
         time.sleep(0.5)  # Give playback time to start
         print("Playing audio...\n")
