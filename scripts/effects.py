@@ -55,29 +55,17 @@ class LEDEffects:
         # Total LED count across all strips
         total_leds = NUM_LEDS_PER_STRIP * NUM_STRIPS
         
-        # Map 5 frequency bands to hue spectrum (red → yellow → green → cyan → blue)
-        # Hue progression: 0° (red) → 60° (yellow) → 120° (green) → 180° (cyan) → 240° (blue)
-        # Boost lower frequencies to dominate color
-        band_weights = {
-            'sub_bass': features.get('sub_bass', 0) * 8.0,    # Deep red dominance
-            'bass': features.get('bass', 0) * 8.0,            # Red-orange
-            'low_mid': features.get('low_mid', 0) * 2.0,      # Yellow-green
-            'mid_high': features.get('mid_high', 0) * 1.0,    # Green-cyan
-            'treble': features.get('treble', 0) * 1.0,        # Blue-cyan
-        }
+        # Simple red-blue mapping: bass = red (0°), treble = blue (240°)
+        # Ignore midrange to prevent green/yellow dominance
+        bass_energy = sub_bass_val + bass_val  # Combine both bass bands
+        treble_energy = treble_val
         
-        total_energy = sum(band_weights.values()) + 0.001
+        total_bass_treble = bass_energy + treble_energy + 0.001
+        bass_weight = bass_energy / total_bass_treble
+        treble_weight = treble_energy / total_bass_treble
         
-        # Calculate weighted hue (0°, 60°, 120°, 180°, 240°)
-        hue_contributions = [
-            (band_weights.get('sub_bass', 0) / total_energy) * 0,      # 0° = red
-            (band_weights.get('bass', 0) / total_energy) * 30,         # 30° = red-orange
-            (band_weights.get('low_mid', 0) / total_energy) * 80,      # 80° = yellow-green
-            (band_weights.get('mid_high', 0) / total_energy) * 140,    # 140° = green-cyan
-            (band_weights.get('treble', 0) / total_energy) * 240,      # 240° = blue
-        ]
-        
-        hue = sum(hue_contributions) % 360
+        # Hue: pure red (0°) when bass dominates, pure blue (240°) when treble dominates
+        hue = (treble_weight * 240.0) % 360
         
         # Get the 5 bands to find strongest for core_fraction
         sub_bass_val = features.get('sub_bass', 0)
