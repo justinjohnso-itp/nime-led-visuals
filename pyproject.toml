@@ -5,7 +5,6 @@ description = "Audio-reactive LED visualization for Daisy Seed on Raspberry Pi"
 authors = [{name = "Justin Johnson", email = "justinaugustejohnson@gmail.com"}]
 
 [tool.pixi.pypi-dependencies]
-python-sounddevice = {version = ">=0.4.6", markers = "platform_system == 'Darwin'"}
 rpi-ws281x = {version = ">=5.0.0", markers = "platform_machine == 'aarch64'"}
 adafruit-circuitpython-neopixel = {version = ">=6.3.18", markers = "platform_machine == 'aarch64'"}
 adafruit-circuitpython-led-animation = {version = ">=2.12.4", markers = "platform_machine == 'aarch64'"}

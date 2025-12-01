@@ -2,14 +2,24 @@
 """Analyze audio file and collect statistics for visualization tuning"""
 
 import sys
+import time
 import numpy as np
+import platform
+import subprocess
 from audio_input import get_audio_input
 from audio_analyzer import AudioAnalyzer
 from config import SAMPLE_RATE, CHUNK_SIZE
 
-
 def main(filepath):
     print(f"Analyzing: {filepath}\n")
+
+    # Start audio playback in background
+    if platform.system() == 'Darwin':
+        subprocess.Popen(['afplay', filepath])
+    elif platform.system() == 'Linux':
+        subprocess.Popen(['aplay', filepath])
+    
+    print("Playing audio...\n")
 
     audio = get_audio_input(source="file", filepath=filepath, sample_rate=SAMPLE_RATE, chunk_size=CHUNK_SIZE)
     analyzer = AudioAnalyzer(sample_rate=SAMPLE_RATE)
@@ -21,10 +31,12 @@ def main(filepath):
     highs = []
     
     chunk_count = 0
-    max_chunks = 500  # About 5 seconds at 44.1kHz with 1024 chunk size
+    first_chunk = True
+    initial_position = None
+    chunk_duration = CHUNK_SIZE / SAMPLE_RATE
 
     print("Reading audio...")
-    while chunk_count < max_chunks:
+    while True:
         chunk = audio.read_chunk()
         features = analyzer.analyze(chunk)
 
@@ -33,10 +45,18 @@ def main(filepath):
         mids.append(features['mid'])
         highs.append(features['high'])
 
-        if chunk_count % 50 == 0:
-            print(f"  Chunk {chunk_count}: Vol={features['volume']:.3f} Bass={features['bass']:.3f} Mid={features['mid']:.3f} High={features['high']:.3f}")
+        print(f"  Chunk {chunk_count}: Vol={features['volume']:.3f} Bass={features['bass']:.3f} Mid={features['mid']:.3f} High={features['high']:.3f}")
+
+        # Break after one complete pass through the file
+        if first_chunk:
+            initial_position = audio.position
+            first_chunk = False
+        elif audio.position < initial_position:
+            # File looped, we've analyzed one complete pass
+            break
 
         chunk_count += 1
+        time.sleep(chunk_duration)  # Stay in sync with audio playback
 
     audio.close()
 

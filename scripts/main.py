@@ -4,6 +4,8 @@
 import time
 import sys
 import platform
+import numpy as np
+import subprocess
 
 from config import GPIO_PINS, NUM_LEDS_PER_STRIP, LED_BRIGHTNESS, SAMPLE_RATE, CHUNK_SIZE
 from audio_input import get_audio_input
@@ -53,6 +55,14 @@ def main(audio_source='live', filepath=None):
 
     print("📊 Initializing audio analyzer...")
     analyzer = AudioAnalyzer(sample_rate=SAMPLE_RATE)
+    
+    # Play audio file if provided
+    if audio_source == 'file':
+        if platform.system() == 'Darwin':
+            subprocess.Popen(['afplay', filepath])
+        elif platform.system() == 'Linux':
+            subprocess.Popen(['aplay', filepath])
+        print("🔊 Playing audio...")
 
     print("▶️  Starting audio-reactive visualization...")
     print("   Press Ctrl+C to stop")
