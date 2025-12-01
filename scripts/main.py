@@ -6,6 +6,7 @@ import sys
 import platform
 import numpy as np
 import subprocess
+import os
 
 from config import GPIO_PINS, NUM_LEDS_PER_STRIP, LED_BRIGHTNESS, SAMPLE_RATE, CHUNK_SIZE
 from audio_input import get_audio_input
@@ -61,7 +62,8 @@ def main(audio_source='live', filepath=None):
         if platform.system() == 'Darwin':
             subprocess.Popen(['afplay', filepath])
         elif platform.system() == 'Linux':
-            subprocess.Popen(['mpg123', '-o', 'pulse', filepath])
+            env = os.environ.copy()
+            subprocess.Popen(['mpg123', '-o', 'pulse', filepath], env=env)
         time.sleep(0.5)  # Give playback time to start
         print("🔊 Playing audio...")
 

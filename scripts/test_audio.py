@@ -6,6 +6,7 @@ import time
 import numpy as np
 import platform
 import subprocess
+import os
 from audio_input import get_audio_input
 from audio_analyzer import AudioAnalyzer
 from config import SAMPLE_RATE, CHUNK_SIZE
@@ -21,7 +22,8 @@ def main(filepath):
         if platform.system() == 'Darwin':
             subprocess.Popen(['afplay', filepath])
         elif platform.system() == 'Linux':
-            subprocess.Popen(['mpg123', '-o', 'pulse', filepath])
+            env = os.environ.copy()
+            subprocess.Popen(['mpg123', '-o', 'pulse', filepath], env=env)
         time.sleep(0.5)  # Give playback time to start
         print("Playing audio...\n")
     except Exception as e:
