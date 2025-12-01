@@ -42,7 +42,9 @@ class AudioAnalyzer:
         self.buffer = np.array([], dtype=np.float32)
         
         # STFT/Melspectrogram parameters (must match librosa calls)
-        self.n_fft = 2048
+        # n_fft=3072 balances frequency resolution (14.38 Hz/bin) with startup latency
+        # Covers 3 chunks before first analysis (3 * 23.2ms = 69.6ms startup delay)
+        self.n_fft = 3072
         self.hop_length = 512
 
     def analyze(self, audio_chunk):
@@ -68,8 +70,8 @@ class AudioAnalyzer:
             self.buffer = np.zeros_like(self.buffer)
         
         # Only analyze when buffer has enough samples for melspectrogram
-        # n_fft=2048 needs at least 2048 samples to produce any output
-        if len(self.buffer) < 2048:
+        # n_fft=4096 needs at least 4096 samples to produce any output
+        if len(self.buffer) < self.n_fft:
             return self._empty_features()
         
         # Compute mel-spectrogram on accumulated buffer
@@ -113,8 +115,8 @@ class AudioAnalyzer:
             mask = (mel_freqs >= low_freq) & (mel_freqs < high_freq)
             
             if np.any(mask):
-                # Mean energy in this band (accounts for variable mel-band widths)
-                energy = np.mean(latest_frame[mask])
+                # Sum energy in this band (don't average—sum preserves magnitude)
+                energy = np.sum(latest_frame[mask]) / np.sum(mask)  # normalize by band count
             else:
                 energy = 0.0
             
