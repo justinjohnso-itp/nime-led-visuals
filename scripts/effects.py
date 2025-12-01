@@ -57,8 +57,8 @@ class LEDEffects:
         
         # Determine hue based on which band is strongest (most energy)
         # This creates a natural color shift: bass=red, mid=green, treble=blue
-        # Boost bass weight so it's more likely to show through (2x multiplier)
-        weighted_bass = bass * 2.0
+        # Boost bass weight so it's more likely to show through (4x multiplier)
+        weighted_bass = bass * 4.0
         total_energy = weighted_bass + mid + high + 0.001  # Avoid division by zero
         bass_norm = weighted_bass / total_energy
         mid_norm = mid / total_energy
