@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Audio-reactive LED visualization for Daisy Seed on Raspberry Pi"
 authors = [{name = "Justin Johnson", email = "justinaugustejohnson@gmail.com"}]
 
-[tool.pixi]
+[tool.pixi.project]
 channels = ["conda-forge"]
 platforms = ["linux-aarch64", "osx-arm64"]
 
