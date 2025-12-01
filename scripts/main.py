@@ -89,6 +89,7 @@ def main(audio_source='live', filepath=None):
 
 if __name__ == '__main__':
     import argparse
+    import os
 
     parser = argparse.ArgumentParser(
         description='Audio-reactive LED visualization'
@@ -96,14 +97,19 @@ if __name__ == '__main__':
     parser.add_argument(
         '--file',
         type=str,
-        help='Path to MP3 file (uses file input instead of live audio)'
+        help='MP3 filename (looks in music/ directory by default)'
     )
 
     args = parser.parse_args()
 
     if args.file:
-        print(f"Using file input: {args.file}")
-        main(audio_source='file', filepath=args.file)
+        # Try music/ directory first, then current directory
+        filepath = args.file
+        if not os.path.exists(filepath) and os.path.exists(f'music/{filepath}'):
+            filepath = f'music/{filepath}'
+        
+        print(f"Using file input: {filepath}")
+        main(audio_source='file', filepath=filepath)
     else:
         print("Using live audio input")
         main(audio_source='live')

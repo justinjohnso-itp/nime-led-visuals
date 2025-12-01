@@ -4,10 +4,10 @@
 
 ```
 nime-led-visuals/
-├── pyproject.toml          # Poetry config
-├── poetry.lock
+├── pixi.toml              # Pixi config (cross-platform, fast)
+├── pixi.lock
 ├── README.md
-├── HARDWARE_SETUP.md       # Physical wiring (companion doc)
+├── HARDWARE_SETUP.md      # Physical wiring (companion doc)
 ├── CODE_GUIDE.md          # This file
 ├── scripts/
 │   ├── main.py            # Main loop (integration of all modules)
@@ -16,37 +16,35 @@ nime-led-visuals/
 │   ├── effects.py         # Visual effect mapping
 │   ├── config.py          # Configuration constants
 │   ├── test_leds.py       # Hardware verification test
-│   └── test_audio.py      # Audio input and analysis test
-└── test.mp3              # Sample MP3 for testing tonight
+│   ├── test_audio.py      # Audio input and analysis test
+│   └── analyze_audio.py   # Audio statistics analyzer
+└── music/
+    └── test.mp3           # Sample MP3 for testing
 ```
 
 ---
 
 ## 🚀 Step-by-Step Code Implementation
 
-### Phase 1: Project Setup
+### Phase 1: Project Setup (with Pixi)
 
-**Step 1.1: Initialize Poetry**
+**Step 1.1: Install Pixi** (one-time setup)
 ```bash
-mkdir nime-led-visuals
-cd nime-led-visuals
-poetry init
-# Follow prompts, use defaults
+# Mac
+brew install pixi
+
+# Raspberry Pi
+curl -fsSLO https://github.com/prefix-dev/pixi/releases/latest/download/pixi-aarch64-unknown-linux-gnu
+chmod +x pixi-aarch64-unknown-linux-gnu
+sudo mv pixi-aarch64-unknown-linux-gnu /usr/local/bin/pixi
 ```
 
-**Step 1.2: Add dependencies**
+**Step 1.2: Install project dependencies**
 ```bash
-# Core LED libraries (same as your looper.py)
-poetry add rpi-ws281x
-poetry add adafruit-circuitpython-neopixel
-poetry add adafruit-circuitpython-led-animation
-
-# Audio processing
-poetry add sounddevice numpy scipy
-
-# File input (for testing with MP3s tonight)
-poetry add librosa
+pixi install
 ```
+
+All dependencies are defined in `pixi.toml`. Pixi handles both Mac and Pi automatically.
 
 ---
 
@@ -105,7 +103,7 @@ Simple script to verify LED hardware works.
 
 **Run:**
 ```bash
-poetry run sudo python test_leds.py
+pixi run test-leds
 ```
 
 **Expected result:** All LEDs light up, no flickering, correct colors
@@ -640,33 +638,26 @@ Detect sudden volume increases (note onsets) and flash white.
 
 ---
 
-## 🧩 Putting It Together
+## ✅ Complete! Ready to Test
 
-### Your coding workflow:
+All code is built and ready. Use Pixi to run:
 
-1. **Day 1: Setup & Testing**
-   - Poetry setup
-   - Write config.py
-   - Write and test test_leds.py
-   - Write and test test_audio.py
-   - **Goal:** Verify hardware works
+```bash
+# Install dependencies (first time)
+pixi install
 
-2. **Day 2: Basic Reactive**
-   - Write audio_analyzer.py (RMS only)
-   - Write simple main.py (volume → brightness)
-   - **Goal:** LEDs pulse with playing
+# Test audio analysis on Mac with MP3
+pixi run run-file
 
-3. **Day 3: Frequency Reactive**
-   - Expand audio_analyzer.py (add FFT)
-   - Write effects.py (frequency spectrum)
-   - Update main.py to use effects
-   - **Goal:** Different colors for different sounds
+# Run on Pi with live audio
+pixi run run-live
 
-4. **Day 4: Polish**
-   - Add multiple effects
-   - Add smoothing
-   - Optimize performance
-   - **Goal:** Performance ready
+# Or use custom tasks
+pixi run test-audio          # Analyze audio file
+pixi run test-leds           # Test LED hardware
+```
+
+See `pixi.toml` for all available tasks.
 
 ---
 
@@ -688,26 +679,24 @@ Detect sudden volume increases (note onsets) and flash white.
 
 ---
 
-## 🚀 Quick Start Commands
+## 🚀 Quick Start with Pixi
 
 ```bash
-# Create project
-mkdir nime-led-visuals && cd nime-led-visuals
-poetry init
+# Install Pixi (one-time)
+brew install pixi          # Mac
+# or see CODE_GUIDE Phase 1 for Pi installation
 
-# Add dependencies
-poetry add rpi-ws281x adafruit-circuitpython-neopixel
-poetry add adafruit-circuitpython-led-animations
-poetry add sounddevice numpy scipy
+# In project directory
+pixi install               # Install dependencies
 
-# Test LEDs (write this script)
-poetry run sudo python test_leds.py
+# Run tasks (see pixi.toml)
+pixi run run-file          # Test with MP3 on Mac
+pixi run run-live          # Live audio on Pi
+pixi run test-audio        # Analyze audio file
+pixi run test-leds         # Test LED hardware
 
-# Test audio (write this script)
-poetry run sudo python test_audio.py
-
-# Run main (write this script)
-poetry run sudo python main.py
+# Or run Python directly
+pixi run python scripts/main.py --file music/test.mp3
 ```
 
 ---
