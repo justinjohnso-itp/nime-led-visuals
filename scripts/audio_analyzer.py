@@ -42,7 +42,8 @@ class AudioAnalyzer:
         self.buffer = np.array([], dtype=np.float32)
         
         # STFT/Melspectrogram parameters (must match librosa calls)
-        self.n_fft = 2048
+        # n_fft=4096 gives 10.77 Hz/bin resolution (vs 21.5 Hz at 2048) for better sub-bass isolation
+        self.n_fft = 4096
         self.hop_length = 512
 
     def analyze(self, audio_chunk):
@@ -83,7 +84,7 @@ class AudioAnalyzer:
                 fmin=FREQ_MIN,
                 fmax=FREQ_MAX,
                 power=2.0,
-                window='hann',
+                window=('kaiser', 14),  # Kaiser β=14: -120dB sidelobes vs Hann's -32dB
                 center=False,  # Don't center-pad (we manage buffering)
             )
             # S shape: (128, num_frames)

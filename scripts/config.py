@@ -17,8 +17,8 @@ AUDIO_INPUT_DEVICE = 1  # Focusrite 2i2 USB (from sounddevice.query_devices())
 # Frequency Bands (Hz) - 5 bands for nuanced color mapping
 # Maps to hue: Red (0°) → Yellow (60°) → Green (120°) → Cyan (180°) → Blue (240°)
 FREQ_BANDS = [
-    (20, 80, "sub_bass"),       # Sub-bass: deep kick (red)
-    (80, 250, "bass"),          # Bass: foundational low end (red-orange)
+    (20, 90, "sub_bass"),       # Sub-bass: deep kick (red) - 90 Hz aligns better with mel centers
+    (90, 250, "bass"),          # Bass: foundational low end (red-orange)
     (250, 1000, "low_mid"),     # Low-mid: presence (yellow-green)
     (1000, 4000, "mid_high"),   # Mid-high: clarity (green-cyan)
     (4000, 20000, "treble"),    # Treble: hi-hats, claps (blue-cyan)
