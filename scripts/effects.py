@@ -8,7 +8,7 @@ class LEDEffects:
 
     @staticmethod
     def vu_meter(strip, volume, color=(0, 255, 0)):
-        """Light up LEDs from start based on volume
+        """Light up LEDs from start based on volume, with brightness following amplitude
         
         Args:
             strip: neopixel.NeoPixel object
@@ -18,10 +18,12 @@ class LEDEffects:
         num_leds = len(strip)
         num_lit = int(volume * num_leds)
 
-        # Light up from beginning
+        # Light up from beginning with brightness proportional to volume
         for i in range(num_leds):
             if i < num_lit:
-                strip[i] = color
+                # Brightness follows the amplitude value
+                scaled_color = tuple(int(c * volume) for c in color)
+                strip[i] = scaled_color
             else:
                 strip[i] = (0, 0, 0)
 

@@ -24,6 +24,11 @@ class AudioAnalyzer:
         self.prev_bass = 0.0
         self.prev_mid = 0.0
         self.prev_high = 0.0
+        # Running max for per-band normalization
+        self.bass_max = 0.1
+        self.mid_max = 0.1
+        self.high_max = 0.1
+        self.decay_rate = 0.98  # Slowly decay max values
 
     def analyze(self, audio_chunk):
         """Analyze audio chunk and return features
@@ -52,17 +57,25 @@ class AudioAnalyzer:
         mid = self._get_band_energy(fft, freqs, MID_LOW, MID_HIGH)
         high = self._get_band_energy(fft, freqs, HIGH_LOW, HIGH_HIGH)
 
-        # Apply log scaling to compress high values (bass is always loud)
-        # This makes subtle changes visible across the spectrum
+        # Apply log scaling to compress high values
         bass = np.log10(bass + 1)
         mid = np.log10(mid + 1)
         high = np.log10(high + 1)
 
-        # Normalize to 0-1 range
-        max_energy = max(bass, mid, high, 0.001)  # Avoid division by zero
-        bass_norm = bass / max_energy
-        mid_norm = mid / max_energy
-        high_norm = high / max_energy
+        # Update running max for each band (adaptive peak detection)
+        self.bass_max = max(bass, self.bass_max * self.decay_rate)
+        self.mid_max = max(mid, self.mid_max * self.decay_rate)
+        self.high_max = max(high, self.high_max * self.decay_rate)
+
+        # Normalize each band independently by its own max
+        bass_norm = bass / max(self.bass_max, 0.01)
+        mid_norm = mid / max(self.mid_max, 0.01)
+        high_norm = high / max(self.high_max, 0.01)
+        
+        # Clip to 0-1 range
+        bass_norm = np.clip(bass_norm, 0, 1)
+        mid_norm = np.clip(mid_norm, 0, 1)
+        high_norm = np.clip(high_norm, 0, 1)
 
         # Apply smoothing to prevent flickering
         volume = self._smooth(volume, self.prev_volume)
