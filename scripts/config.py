@@ -56,7 +56,7 @@ NOISE_GATE_THRESHOLD = 0.02   # Mute signals quieter than 2% RMS to kill input n
 
 # Dominant Frequency Visualization Parameters
 HUE_RANGE = 240              # Red (0°) to Blue (240°) covers bass to treble
-EDGE_HUE_SHIFT = 40          # ±40° hue shift at edges (adjacent frequency blending)
+EDGE_HUE_SHIFT = 120         # ±120° hue shift at edges (aggressive treble bleed for hi-hats/claps)
 CORE_FRACTION_MIN = 0.4      # Minimum core width (40%, for narrow tones)
 CORE_FRACTION_MAX = 0.8      # Maximum core width (80%, for broad spectrum)
 MIN_BRIGHTNESS = 0.01        # Even lower floor (nearly off) for maximum contrast

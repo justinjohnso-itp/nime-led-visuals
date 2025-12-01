@@ -58,13 +58,11 @@ class LEDEffects:
         # Determine hue based on which band is strongest (most energy)
         # This creates a natural color shift: bass=red, mid=green, treble=blue
         # Boost bass weight so it's more likely to show through (4x multiplier)
-        # Also boost treble so hi-hats/claps edge colors are visible (2x multiplier)
         weighted_bass = bass * 4.0
-        weighted_high = high * 2.0
-        total_energy = weighted_bass + mid + weighted_high + 0.001  # Avoid division by zero
+        total_energy = weighted_bass + mid + high + 0.001  # Avoid division by zero
         bass_norm = weighted_bass / total_energy
         mid_norm = mid / total_energy
-        high_norm = weighted_high / total_energy
+        high_norm = high / total_energy
         
         # Map band dominance to hue (0-360°)
         # Red (0°) for bass, Green (120°) for mid, Blue (240°) for treble
@@ -104,19 +102,23 @@ class LEDEffects:
                 edge_factor = np.clip(edge_factor, 0, 1)
                 
                 # Determine which edge we're on based on position
+                # Edges scale their hue shift based on treble energy (hi-hats, claps)
+                # This pulls blue in when percussion hits
+                treble_edge_boost = high_norm * EDGE_HUE_SHIFT
+                
                 if position_in_strip > 0.5:
                     # Right half of strip
                     if is_right_edge:
-                        # Fade toward higher frequencies (more blue)
-                        current_hue = hue + (edge_factor * EDGE_HUE_SHIFT)
+                        # Fade toward higher frequencies (more blue) - boosted by treble
+                        current_hue = hue + (edge_factor * treble_edge_boost)
                     else:
                         # No right edge blending
                         current_hue = hue
                 else:
                     # Left half of strip
                     if is_left_edge:
-                        # Fade toward lower frequencies (more red)
-                        current_hue = hue - (edge_factor * EDGE_HUE_SHIFT)
+                        # Fade toward lower frequencies (more red) - opposite of treble
+                        current_hue = hue - (edge_factor * treble_edge_boost)
                     else:
                         # No left edge blending
                         current_hue = hue
