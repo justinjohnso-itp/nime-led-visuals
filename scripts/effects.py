@@ -57,7 +57,7 @@ class LEDEffects:
         
         # Get the 5 bands to find strongest for core_fraction
         sub_bass_val = features.get('sub_bass', 0)
-        bass_val = features.get('bass_norm', 0)  # Renamed from 'bass' to avoid collision with legacy 'bass'
+        bass_val = features.get('bass', 0)
         low_mid_val = features.get('low_mid', 0)
         mid_high_val = features.get('mid_high', 0)
         treble_val = features.get('treble', 0)

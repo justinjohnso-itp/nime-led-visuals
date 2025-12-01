@@ -1,14 +1,7 @@
-"""Audio feature extraction using librosa (industry standard for audio analysis)
-
-Librosa handles:
-- Mel-scale spectral analysis (logarithmic frequency matching human ears)
-- Proper windowing and overlapping (reduces spectral leakage by design)
-- Octave-band energy extraction (cleaner frequency separation)
-- No manual FFT management needed
-"""
+"""Audio feature extraction - simple and working version"""
 
 import numpy as np
-import librosa
+from scipy.signal import stft
 from config import (
     SAMPLE_RATE,
     CHUNK_SIZE,
@@ -20,56 +13,33 @@ from config import (
     NOISE_GATE_THRESHOLD,
     FREQ_MIN,
     FREQ_MAX,
+    FREQ_BANDS,
 )
 
 
 class AudioAnalyzer:
-    """Extract frequency and volume features from audio chunks using librosa"""
+    """Extract frequency and volume features from audio chunks"""
 
     def __init__(self, sample_rate=SAMPLE_RATE, smoothing=SMOOTHING_FACTOR):
         self.sample_rate = sample_rate
         self.smoothing = smoothing
         
         # Per-band peak tracking (independent normalization for each band)
-        self.band_max = {
-            'sub_bass': 0.1,
-            'bass': 0.1,
-            'low_mid': 0.1,
-            'mid_high': 0.1,
-            'treble': 0.1,
-        }
-        self.decay_rate = 0.60  # Fast decay to kill lingering leakage
-        self.prev_raw_volume = 0.0  # For transient detection
+        self.band_max = {name: 0.1 for _, _, name in FREQ_BANDS}
+        self.decay_rate = 0.60
+        self.prev_raw_volume = 0.0
         
-        # Legacy band maxes for backward compatibility
+        # Legacy maxes
         self.bass_max = 0.1
         self.mid_max = 0.1
         self.high_max = 0.1
         
-        # Attack/Decay envelope state (for brightness)
+        # ADSR envelope
         self.envelope_value = 0.0
         self.target_envelope = 0.0
-        
-        # Audio buffer for librosa melspectrogram
-        # We need n_fft samples minimum (2048) for good frequency resolution
-        self.audio_buffer = np.array([], dtype=np.float32)
-        self.min_buffer_size = 2048  # n_fft size - minimum for melspectrogram
 
     def analyze(self, audio_chunk):
-        """Analyze audio using mel-scale spectrogram (better frequency separation)
-        
-        Librosa's mel-spectrogram:
-        - Uses logarithmic frequency scale (matches human hearing)
-        - Automatically handles windowing and overlap
-        - Separates low frequencies better (40 Hz won't leak into 200+ Hz)
-        - Industry standard (used in Spotify, music recognition, etc.)
-        
-        Args:
-            audio_chunk: numpy array of audio samples (int16 or float32)
-            
-        Returns:
-            dict with frequency band energies and features
-        """
+        """Analyze audio chunk and return features"""
         # Convert to float
         if audio_chunk.dtype == np.int16:
             audio = audio_chunk.astype(np.float32) / 32768.0
@@ -79,135 +49,51 @@ class AudioAnalyzer:
         # Apply input gain
         audio = audio * INPUT_GAIN
         
-        # Calculate volume on current chunk
+        # Calculate volume
         volume = np.sqrt(np.mean(audio**2))
-        
-        # Debug raw audio levels
-        audio_raw = audio_chunk.astype(np.float32)
-        if audio_chunk.dtype == np.int16:
-            audio_raw = audio_raw / 32768.0
-        audio_peak = np.max(np.abs(audio_raw))
-        
-        # Accumulate in buffer
-        self.audio_buffer = np.concatenate([self.audio_buffer, audio])
-        
-        # Debug: log buffer status every ~1 second (43 chunks)
-        if len(self.audio_buffer) % (CHUNK_SIZE * 43) < CHUNK_SIZE:
-            print(f"  Buffer: {len(self.audio_buffer)}/{self.min_buffer_size}, vol={volume:.4f}, peak={audio_peak:.4f}, gain={INPUT_GAIN}, gate={NOISE_GATE_THRESHOLD}")
-        
-        # Only analyze when we have enough buffered samples
-        if len(self.audio_buffer) < self.min_buffer_size:
-            # Return empty features while building buffer
-            return self._empty_features()
         
         # Apply noise gate
         if volume < NOISE_GATE_THRESHOLD:
             volume = 0.0
-            # Zero out buffer if too quiet
-            self.audio_buffer = np.zeros_like(self.audio_buffer)
-        
-        # Compute mel-spectrogram: librosa handles windowing/overlap internally
-        # n_mels=128: 128 mel-bands (logarithmic frequency spacing)
-        # n_fft=2048: window size (good frequency resolution)
-        # hop_length=512: 50% overlap between frames
-        try:
-            mel_spec = librosa.feature.melspectrogram(
-                y=self.audio_buffer,
-                sr=self.sample_rate,
-                n_mels=128,  # 128 mel-bands (logarithmic frequency scale)
-                n_fft=2048,  # Large FFT for low-freq separation
-                hop_length=512,  # 50% overlap = less spectral leakage
-                fmin=FREQ_MIN,  # 20 Hz floor
-                fmax=FREQ_MAX,  # 20 kHz ceiling
-                power=2.0,  # Power spectrum (magnitude squared)
-                window='hann',
-                center=True,  # Center padding for alignment
-                pad_mode='reflect',  # Better than zeros for edges
-            )
-        except Exception as e:
-            print(f"Melspectrogram error: {e}")
-            return self._empty_features()
-        
-        # Validate mel-spectrogram output shape
-        if mel_spec.ndim != 2 or mel_spec.shape[0] != 128 or mel_spec.shape[1] < 1:
-            return self._empty_features()
-        
-        # Drop analyzed samples from buffer: use hop_length not CHUNK_SIZE
-        # Each analysis frame advances by hop_length (512) samples
-        # We analyzed int(mel_spec.shape[1]) frames, so we advanced by that many hops
-        hops_analyzed = mel_spec.shape[1]
-        samples_analyzed = hops_analyzed * 512  # hop_length
-        # Don't drop more than we have
-        samples_to_drop = min(samples_analyzed, len(self.audio_buffer))
-        self.audio_buffer = self.audio_buffer[samples_to_drop:]
-        
-        # Aggregate energy across ALL frames (not just latest) for stability
-        # This reduces jitter from single-frame noise spikes
-        mel_power = mel_spec  # Already in power scale (power=2.0)
-        
-        # Average across time axis (all frames) for smoother energy measurement
-        # Use median for robustness to outliers, or mean for responsiveness
-        mel_linear = np.mean(mel_power, axis=1)  # Average across time: shape (128,)
-        
-        # Avoid log(0) by clipping very small values
-        mel_linear = np.clip(mel_linear, 1e-10, None)
-        
-        # Map mel-bands to our 5 frequency bands
-        # Librosa provides mel_frequencies() to know which Hz each mel-band represents
-        mel_freqs = librosa.mel_frequencies(n_mels=128, fmin=FREQ_MIN, fmax=FREQ_MAX)
-        
-        # Define frequency ranges for our bands (in Hz)
-        band_ranges = {
-            'sub_bass': (20, 80),
-            'bass': (80, 250),
-            'low_mid': (250, 1000),
-            'mid_high': (1000, 4000),
-            'treble': (4000, 20000),
-        }
-        
-        # Extract energy for each band
+            audio = np.zeros_like(audio)
+
+        # Direct FFT (no scipy.stft complexity)
+        # Apply Hamming window to reduce spectral leakage
+        window = np.hamming(len(audio))
+        audio_windowed = audio * window
+
+        # FFT with 2x zero-padding for better frequency resolution
+        fft = np.abs(np.fft.rfft(audio_windowed, n=len(audio) * 2))
+        freqs = np.fft.rfftfreq(len(audio) * 2, 1 / self.sample_rate)
+
+        # Extract frequency bands
         band_energies = {}
         band_norms = {}
         
-        for band_name, (freq_low, freq_high) in band_ranges.items():
-            # Find mel-bands in this frequency range
-            # Use inclusive upper bound for last band to avoid losing high-freq energy
-            if band_name == 'treble':
-                mask = (mel_freqs >= freq_low) & (mel_freqs <= freq_high)
-            else:
-                mask = (mel_freqs >= freq_low) & (mel_freqs < freq_high)
+        for low_freq, high_freq, name in FREQ_BANDS:
+            mask = (freqs >= low_freq) & (freqs < high_freq)
+            energy = np.mean(fft[mask]) if np.any(mask) else 0.0
+            band_energies[name] = energy
             
-            if np.any(mask):
-                # Average energy in this band (not sum) to handle variable-width bands
-                # This accounts for mel-bands being logarithmically spaced
-                energy = np.mean(mel_linear[mask])
-            else:
-                energy = 0.0
+            # Update running max
+            self.band_max[name] = max(energy, self.band_max[name] * self.decay_rate)
             
-            band_energies[band_name] = energy
-            
-            # Update running max for this band
-            self.band_max[band_name] = max(energy, self.band_max[band_name] * self.decay_rate)
-            
-            # Normalize by running max
-            norm = energy / max(self.band_max[band_name], 0.01)
-            band_norms[band_name] = np.clip(norm, 0, 1)
+            # Normalize
+            norm = energy / max(self.band_max[name], 0.01)
+            band_norms[name] = np.clip(norm, 0, 1)
         
-        # Legacy band extraction for backward compatibility
+        # Legacy bands
         bass = band_norms.get('bass', 0.0)
         mid = (band_norms.get('low_mid', 0.0) + band_norms.get('mid_high', 0.0)) / 2
         high = band_norms.get('treble', 0.0)
         
-        # Calculate spectral centroid on mel-scale
-        # (which frequencies are active?)
-        energy_weighted = mel_linear * mel_freqs
-        total_energy = np.sum(mel_linear) + 1e-10
-        centroid_hz = np.sum(energy_weighted) / total_energy
+        # Spectral features
+        magnitude = fft / (np.sum(fft) + 1e-10)
+        centroid_hz = np.sum(freqs * magnitude)
         centroid_norm = np.log10(max(centroid_hz, FREQ_MIN)) / np.log10(FREQ_MAX)
         centroid_norm = np.clip(centroid_norm, 0, 1)
         
-        # Bandwidth: RMS width of frequency distribution
-        variance = np.sum((mel_freqs - centroid_hz) ** 2 * mel_linear) / total_energy
+        variance = np.sum((freqs - centroid_hz) ** 2 * magnitude)
         bandwidth_hz = np.sqrt(variance) if variance > 0 else 0
         bandwidth_norm = np.log10(max(bandwidth_hz, 1)) / np.log10(FREQ_MAX / 4)
         bandwidth_norm = np.clip(bandwidth_norm, 0, 1)
@@ -221,12 +107,9 @@ class AudioAnalyzer:
         
         # ADSR envelope
         self.target_envelope = max(bass, mid, high)
-        
         if self.target_envelope > self.envelope_value:
-            # Attack: immediate
             self.envelope_value = self.target_envelope
         else:
-            # Decay: smooth falloff
             chunk_duration = CHUNK_SIZE / self.sample_rate
             decay_factor = 1.0 - (chunk_duration / DECAY_TIME)
             self.envelope_value = self.envelope_value * decay_factor
@@ -235,13 +118,11 @@ class AudioAnalyzer:
         
         return {
             "volume": volume,
-            # Legacy 3-band for backward compatibility with effects.py
             "bass": bass,
             "mid": mid,
             "high": high,
-            # All 5 frequency bands
             "sub_bass": band_norms.get('sub_bass', 0.0),
-            "bass_norm": band_norms.get('bass', 0.0),  # Renamed to avoid key collision
+            "bass": band_norms.get('bass', 0.0),
             "low_mid": band_norms.get('low_mid', 0.0),
             "mid_high": band_norms.get('mid_high', 0.0),
             "treble": band_norms.get('treble', 0.0),
@@ -249,22 +130,4 @@ class AudioAnalyzer:
             "bandwidth": bandwidth_norm,
             "transient": transient,
             "envelope": self.envelope_value,
-        }
-
-    def _empty_features(self):
-        """Return placeholder features while building buffer"""
-        return {
-            "volume": 0.0,
-            "bass": 0.0,
-            "mid": 0.0,
-            "high": 0.0,
-            "sub_bass": 0.0,
-            "bass": 0.0,
-            "low_mid": 0.0,
-            "mid_high": 0.0,
-            "treble": 0.0,
-            "centroid": 0.0,
-            "bandwidth": 0.0,
-            "transient": 0.0,
-            "envelope": 0.0,
         }
