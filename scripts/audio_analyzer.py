@@ -37,12 +37,16 @@ class AudioAnalyzer:
         # ADSR envelope
         self.envelope_value = 0.0
 
-        # FFT setup
+        # FFT setup - use CHUNK_SIZE for fast response
         self.n_fft = CHUNK_SIZE
         self.window = np.hanning(self.n_fft).astype(np.float32)
-
-        # Frequency axis for FFT bins
         self.freqs = rfftfreq(self.n_fft, d=1.0 / self.sample_rate)
+
+        # Larger FFT for cleaner 32-band spectrum (2048 samples = 21 Hz/bin)
+        self.spectrum_n_fft = 2048
+        self.spectrum_window = np.hanning(self.spectrum_n_fft).astype(np.float32)
+        self.spectrum_freqs = rfftfreq(self.spectrum_n_fft, d=1.0 / self.sample_rate)
+        self.spectrum_buffer = np.zeros(self.spectrum_n_fft, dtype=np.float32)
 
         # Pre-compute legacy band bin indices
         self.band_bins = {}
@@ -50,13 +54,34 @@ class AudioAnalyzer:
             idx = np.where((self.freqs >= low_f) & (self.freqs < high_f))[0]
             self.band_bins[name] = idx if idx.size > 0 else None
 
-        # Pre-compute 32-band bin indices (logarithmically spaced)
+        # Pre-compute 32-band bin indices using the larger spectrum FFT
         self.spectrum_bins = []
         for i in range(NUM_SPECTRUM_BANDS):
             low_f = SPECTRUM_FREQS[i]
             high_f = SPECTRUM_FREQS[i + 1]
-            idx = np.where((self.freqs >= low_f) & (self.freqs < high_f))[0]
+            idx = np.where((self.spectrum_freqs >= low_f) & (self.spectrum_freqs < high_f))[0]
             self.spectrum_bins.append(idx if idx.size > 0 else None)
+        
+        # A-weighting curve for perceptual loudness (approximate)
+        # Makes the spectrum reflect what's actually audible
+        self.a_weight = self._compute_a_weight(self.spectrum_freqs)
+    
+    def _compute_a_weight(self, freqs):
+        """Compute A-weighting curve for perceptual loudness"""
+        # A-weighting formula (attempt - simplified version)
+        # Full A-weight: attenuates bass and high treble, boosts 1-6 kHz
+        f = np.maximum(freqs, 1.0)  # Avoid divide by zero
+        
+        # Attempt simplified A-weighting based on equal-loudness contours
+        # This boosts mids (1-4kHz) and rolls off lows and highs
+        ra = (12194**2 * f**4) / (
+            (f**2 + 20.6**2) * 
+            np.sqrt((f**2 + 107.7**2) * (f**2 + 737.9**2)) * 
+            (f**2 + 12194**2)
+        )
+        # Normalize so 1kHz = 1.0
+        a_weight = ra / np.max(ra + 1e-10)
+        return a_weight.astype(np.float32)
 
     def analyze(self, audio_chunk):
         """Analyze one audio chunk using a single FFT"""
@@ -96,23 +121,35 @@ class AudioAnalyzer:
                 "spectrum": self.prev_spectrum.copy(),
             }
 
-        # Ensure frame matches FFT size
+        # Ensure frame matches FFT size (for legacy bands)
         if audio.size < self.n_fft:
             frame = np.zeros(self.n_fft, dtype=np.float32)
             frame[-audio.size:] = audio
         else:
             frame = audio[-self.n_fft:]
 
-        # Window and FFT
+        # Window and FFT (fast, for legacy bands)
         windowed = frame * self.window
         spectrum = rfft(windowed)
         power = spectrum.real ** 2 + spectrum.imag ** 2
 
-        # === 32-band spectrum with smoothing ===
+        # === 32-band spectrum using larger 2048-sample buffer ===
+        # Roll the buffer and add new samples
+        self.spectrum_buffer = np.roll(self.spectrum_buffer, -len(audio))
+        self.spectrum_buffer[-len(audio):] = audio
+        
+        # Larger FFT for cleaner frequency resolution
+        spectrum_windowed = self.spectrum_buffer * self.spectrum_window
+        spectrum_fft = rfft(spectrum_windowed)
+        spectrum_power = spectrum_fft.real ** 2 + spectrum_fft.imag ** 2
+        
+        # Apply A-weighting for perceptual loudness
+        spectrum_power = spectrum_power * self.a_weight
+        
         spectrum_bands = np.zeros(NUM_SPECTRUM_BANDS)
         for i, idx in enumerate(self.spectrum_bins):
             if idx is not None and len(idx) > 0:
-                spectrum_bands[i] = float(np.mean(power[idx]))
+                spectrum_bands[i] = float(np.mean(spectrum_power[idx]))
 
         # Update running max with decay
         self.spectrum_max = np.maximum(spectrum_bands, self.spectrum_max * self.decay_rate)
