@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Main loop for audio-reactive LED visuals"""
+"""Main loop for audio-reactive LED visuals with threading"""
 
 import time
 import sys
 import platform
+import threading
 import numpy as np
 import subprocess
 import os
@@ -37,8 +38,59 @@ def initialize_strips():
     return strips
 
 
+def audio_thread_func(audio, analyzer, shared_features, stop_event):
+    """Continuously read and analyze audio without waiting for LED updates
+    
+    Args:
+        audio: audio input source
+        analyzer: AudioAnalyzer instance
+        shared_features: dict to store latest features for LED thread
+        stop_event: threading.Event to signal shutdown
+    """
+    try:
+        while not stop_event.is_set():
+            # Read audio chunk
+            chunk = audio.read_chunk()
+            
+            # Analyze audio features
+            features = analyzer.analyze(chunk)
+            
+            # Store latest features (dict update is atomic in Python)
+            shared_features.update(features)
+            
+            # No sleep - keep reading audio constantly
+    except Exception as e:
+        print(f"\n❌ Audio thread error: {e}")
+    finally:
+        audio.close()
+
+
+def led_thread_func(strips, shared_features, stop_event):
+    """Update LEDs periodically without blocking audio
+    
+    Args:
+        strips: list of neopixel.NeoPixel objects
+        shared_features: dict with latest audio features
+        stop_event: threading.Event to signal shutdown
+    """
+    try:
+        while not stop_event.is_set():
+            # Use latest features from audio thread
+            LEDEffects.frequency_spectrum(strips, shared_features)
+            
+            # Fixed 20 FPS LED updates (50ms)
+            time.sleep(0.05)
+    except Exception as e:
+        print(f"\n❌ LED thread error: {e}")
+    finally:
+        # Cleanup LEDs
+        for strip in strips:
+            strip.fill((0, 0, 0))
+            strip.show()
+
+
 def main(audio_source='live', filepath=None):
-    """Main loop
+    """Main loop with audio and LED threads
     
     Args:
         audio_source: 'file' or 'live'
@@ -69,37 +121,53 @@ def main(audio_source='live', filepath=None):
         time.sleep(0.5)  # Give playback time to start
         print("🔊 Playing audio...")
 
+    # Shared state for communication between threads
+    shared_features = {
+        'volume': 0.0,
+        'bass': 0.0,
+        'mid': 0.0,
+        'high': 0.0
+    }
+    stop_event = threading.Event()
+
     print("▶️  Starting audio-reactive visualization...")
     print("   Press Ctrl+C to stop")
 
+    # Start audio thread (continuous reading)
+    audio_t = threading.Thread(
+        target=audio_thread_func,
+        args=(audio, analyzer, shared_features, stop_event),
+        daemon=True,
+        name="AudioThread"
+    )
+    audio_t.start()
+
+    # Start LED thread (periodic updates)
+    if HAS_LEDS:
+        led_t = threading.Thread(
+            target=led_thread_func,
+            args=(strips, shared_features, stop_event),
+            daemon=True,
+            name="LEDThread"
+        )
+        led_t.start()
+
+    # Main thread: print features and handle shutdown
     try:
         while True:
-            # Read audio chunk
-            chunk = audio.read_chunk()
-
-            # Analyze audio features
-            features = analyzer.analyze(chunk)
-
-            # Print features for testing
-            print(f"Volume: {features['volume']:.3f} | Bass: {features['bass']:.3f} | Mid: {features['mid']:.3f} | High: {features['high']:.3f}", end='\r')
-
-            # Apply LED effects only if available
-            if HAS_LEDS:
-                LEDEffects.frequency_spectrum(strips, features)
-
-            # Small delay for frame rate
-            # NOTE: NeoPixel.show() is blocking (~10ms per strip), so increase this if audio sounds choppy
-            time.sleep(0.05)
+            # Print current features for monitoring
+            print(f"Volume: {shared_features['volume']:.3f} | Bass: {shared_features['bass']:.3f} | Mid: {shared_features['mid']:.3f} | High: {shared_features['high']:.3f}", end='\r')
+            time.sleep(0.1)  # Update display every 100ms
 
     except KeyboardInterrupt:
         print("\n⏹️  Stopping...")
-    finally:
-        # Cleanup
+        stop_event.set()
+        
+        # Wait for threads to finish
+        audio_t.join(timeout=2.0)
         if HAS_LEDS:
-            for strip in strips:
-                strip.fill((0, 0, 0))
-                strip.show()
-        audio.close()
+            led_t.join(timeout=2.0)
+        
         print("✓ Done!")
 
 
