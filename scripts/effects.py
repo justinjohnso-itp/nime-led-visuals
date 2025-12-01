@@ -6,7 +6,7 @@ from config import (
     COLORS, NUM_LEDS_PER_STRIP, NUM_STRIPS,
     HUE_RANGE, EDGE_HUE_SHIFT, CORE_FRACTION_MIN, CORE_FRACTION_MAX,
     MIN_BRIGHTNESS, EDGE_FADE_RATE, TRANSIENT_BOOST, BRIGHTNESS_EXPONENT, FREQ_BANDS,
-    BASS_CENTER_FRACTION
+    BASS_CENTER_FRACTION, BASS_RADIANCE_STRENGTH
 )
 
 
@@ -141,7 +141,7 @@ class LEDEffects:
             pos = i / NUM_LEDS_PER_STRIP  # 0-1 across the strip
             strips[0][i] = get_led_color(pos, is_left_edge=True)
         
-        # Build colors for center strip (no edges, pure core + bass radiance from center)
+        # Build colors for center strip (no edges, pure core + aggressive bass radiance from center)
         for i in range(NUM_LEDS_PER_STRIP):
             pos = i / NUM_LEDS_PER_STRIP
             base_color = get_led_color(pos)
@@ -149,13 +149,17 @@ class LEDEffects:
             # Bass radiance from center: distance from 0.5 determines how much bass bleeds
             distance_from_center = abs(pos - 0.5) * 2  # 0 at center, 1 at edges
             bass_radiance = max(0, 1.0 - (distance_from_center / BASS_CENTER_FRACTION))
-            bass_radiance = bass_radiance * bass_energy * brightness  # Scale by bass strength and overall brightness
             
-            # Blend bass radiance (red hue) with base color
-            # More bass = more red brightness added
+            # Aggressive bass scaling: strong bass hits take over the strip
+            bass_radiance = (bass_radiance ** 0.5) * (bass_energy ** BASS_RADIANCE_STRENGTH) * brightness
+            bass_radiance = np.clip(bass_radiance, 0, 1)
+            
+            # When bass is strong, fade out other colors and go full red
             r, g, b = base_color
-            r = int(np.clip(r + bass_radiance * 255, 0, 255))
-            strips[1][i] = (r, g, b)
+            r = int(r * (1.0 - bass_radiance * 0.5) + bass_radiance * 255)  # Boost red
+            g = int(g * (1.0 - bass_radiance * 0.7))  # Reduce green
+            b = int(b * (1.0 - bass_radiance * 0.7))  # Reduce blue
+            strips[1][i] = (int(np.clip(r, 0, 255)), int(np.clip(g, 0, 255)), int(np.clip(b, 0, 255)))
         
         # Build colors for right strip (right edge fades secondary, rest = core)
         for i in range(NUM_LEDS_PER_STRIP):
