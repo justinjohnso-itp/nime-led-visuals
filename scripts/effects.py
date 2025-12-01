@@ -85,12 +85,8 @@ class LEDEffects:
         # Brightness from envelope
         target_brightness = max(MIN_BRIGHTNESS, envelope ** BRIGHTNESS_EXPONENT)
         
-        # Edge intensity from treble - but suppress if dominant band is NOT treble
-        if dominant_band >= 0 and tonalness > TONALNESS_THRESHOLD and dominant_band < 16:
-            # Tonal content in bass/mid - suppress blue edges
-            target_edge = treble_energy * 0.1  # Heavily attenuate
-        else:
-            target_edge = treble_energy
+        # Edge intensity from treble (now 0-1 range since we use mean)
+        target_edge = treble_energy  # Direct mapping, already 0-1
         
         # Smoothing - edges are faster for more movement
         attack = 0.8
@@ -121,10 +117,11 @@ class LEDEffects:
         edge_size = int(NUM_LEDS_PER_STRIP * 0.6 * LEDEffects._prev_edge)
         feather_size = max(10, edge_size // 2)  # Gradient zone (at least 10 LEDs)
         
-        # Bass core for center strip - with feathering
+        # Bass core for center strip with feathering
         bass_core_size = int(NUM_LEDS_PER_STRIP * 0.5 * (bass_energy / (bass_energy + 0.5)))
-        bass_feather_size = max(10, bass_core_size // 2)  # Feather zone
+        bass_feather_size = max(10, bass_core_size // 2)  # Gradient zone
         bass_brightness = LEDEffects._prev_brightness
+        bass_intensity = min(1.0, bass_energy * 2)  # How strong the red core is
         
         center = NUM_LEDS_PER_STRIP // 2
         
@@ -139,10 +136,13 @@ class LEDEffects:
             dist_from_edge = NUM_LEDS_PER_STRIP - 1 - i  # 0 at right edge
             if dist_from_edge < edge_size:
                 if dist_from_edge < edge_size - feather_size:
+                    # Solid edge zone
                     blend = 1.0
                 else:
+                    # Feather zone - gradient blend
                     blend = 1.0 - ((dist_from_edge - (edge_size - feather_size)) / feather_size)
                 blend = blend * edge_intensity
+                # Blend blue over core
                 r = int(cr * 255 * (1 - blend) + er * 255 * blend)
                 g = int(cg * 255 * (1 - blend) + eg * 255 * blend)
                 b = int(cb * 255 * (1 - blend) + eb * 255 * blend)
@@ -150,7 +150,7 @@ class LEDEffects:
             else:
                 strips[0][i] = core_color
             
-            # Strip 1: bass core from center with feathered edge
+            # Strip 1: bass core from center with feathered gradient
             dist_from_center = abs(i - center)
             if dist_from_center < bass_core_size:
                 if dist_from_center < bass_core_size - bass_feather_size:
@@ -158,8 +158,9 @@ class LEDEffects:
                     blend = 1.0
                 else:
                     # Feather zone - gradient from red to core color
-                    blend = 1.0 - ((dist_from_center - (bass_core_size - bass_feather_size)) / bass_feather_size)
-                # Blend red core with ambient core color
+                    blend = 1.0 - ((dist_from_center - (bass_core_size - bass_feather_size)) / max(bass_feather_size, 1))
+                blend = blend * bass_intensity
+                # Blend red over core color
                 r = int(cr * 255 * (1 - blend) + br * 255 * blend)
                 g = int(cg * 255 * (1 - blend) + bg * 255 * blend)
                 b = int(cb * 255 * (1 - blend) + bb * 255 * blend)
