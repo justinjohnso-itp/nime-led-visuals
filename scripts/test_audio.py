@@ -19,9 +19,10 @@ def main(filepath):
     # Start audio playback in background AFTER loading
     try:
         if platform.system() == 'Darwin':
-            subprocess.Popen(['afplay', filepath], stderr=subprocess.DEVNULL)
+            subprocess.Popen(['afplay', filepath])
         elif platform.system() == 'Linux':
-            subprocess.Popen(['mpg123', filepath], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.Popen(['mpg123', filepath])
+        time.sleep(0.5)  # Give playback time to start
         print("Playing audio...\n")
     except Exception as e:
         print(f"⚠️  Audio playback unavailable: {e}\n")
