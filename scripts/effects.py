@@ -82,8 +82,11 @@ class LEDEffects:
         else:
             target_hue = blended_hue
         
-        # Brightness from envelope
-        target_brightness = max(MIN_BRIGHTNESS, envelope ** BRIGHTNESS_EXPONENT)
+        # Brightness from envelope - go fully dark when envelope is near zero
+        if envelope < 0.01:
+            target_brightness = 0.0
+        else:
+            target_brightness = max(MIN_BRIGHTNESS, envelope ** BRIGHTNESS_EXPONENT)
         
         # Edge intensity from treble (now 0-1 range since we use mean)
         target_edge = treble_energy  # Direct mapping, already 0-1
@@ -96,9 +99,11 @@ class LEDEffects:
         hue_diff = target_hue - LEDEffects._prev_hue
         LEDEffects._prev_hue += hue_diff * (attack if hue_diff > 0 else decay)
         
-        # Brightness smoothing
+        # Brightness smoothing - faster decay to zero
         if target_brightness > LEDEffects._prev_brightness:
             LEDEffects._prev_brightness += (target_brightness - LEDEffects._prev_brightness) * attack
+        elif target_brightness < 0.01:
+            LEDEffects._prev_brightness *= 0.7  # Fast fade to black
         else:
             LEDEffects._prev_brightness += (target_brightness - LEDEffects._prev_brightness) * decay
         
