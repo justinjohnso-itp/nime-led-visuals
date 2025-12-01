@@ -36,41 +36,50 @@ class LEDEffects:
     # Class-level state for smoothing
     _prev_hue = 0.0
     _prev_brightness = 0.0
-    _prev_treble = 0.0
+    _prev_edge = 0.0
     
     @staticmethod
     def frequency_spectrum(strips, features):
-        """Fast frequency spectrum with edge effects
+        """32-band frequency spectrum with edge effects
         
-        Core: Red (bass) → Amber (low-mid)
-        Edges: Blue (treble) - OVERPOWERS core color
+        Uses 32-band spectrum for smooth color mapping:
+        - Bands 0-7 (20-200 Hz): Red (bass)
+        - Bands 8-15 (200-1.5k Hz): Amber (low-mid)  
+        - Bands 16-31 (1.5k-20k Hz): Blue edges (treble)
         
         Args:
             strips: list of 3 PixelSubset objects [left, center, right]
-            features: dict with frequency bands (all 0.0-1.0)
+            features: dict with 'spectrum' (32-band array) and 'envelope'
         """
-        # Extract features
-        sub_bass_val = features.get('sub_bass', 0.0)
-        bass_val = features.get('bass', 0.0)
-        low_mid_val = features.get('low_mid', 0.0)
-        treble_val = features.get('treble', 0.0)
+        spectrum = features.get('spectrum', None)
         envelope = features.get('envelope', 0.0)
         
-        # Core color: Red (0°) for bass, Amber (30°) for low-mids
-        bass_energy = sub_bass_val + bass_val
-        total = bass_energy + low_mid_val + 0.001
-        bass_weight = bass_energy / total
-        mid_weight = low_mid_val / total
+        if spectrum is None or len(spectrum) < 32:
+            # Fallback to legacy
+            spectrum = np.zeros(32)
         
-        # Core hue stays in red-amber range (0° to 30°)
+        # Sum energy in frequency regions (smooth blending)
+        bass_energy = float(np.sum(spectrum[0:8]))      # 20-200 Hz (red)
+        mid_energy = float(np.sum(spectrum[8:16]))      # 200-1.5k Hz (amber)
+        treble_energy = float(np.sum(spectrum[16:32]))  # 1.5k-20k Hz (blue edges)
+        
+        # Core color: weighted blend of red (0°) and amber (30°)
+        core_total = bass_energy + mid_energy + 0.001
+        bass_weight = bass_energy / core_total
+        mid_weight = mid_energy / core_total
         target_hue = (bass_weight * 0.0) + (mid_weight * 30.0)
         
         # Brightness from envelope
         target_brightness = max(MIN_BRIGHTNESS, envelope ** BRIGHTNESS_EXPONENT)
         
-        # Smoothing (attack/decay)
+        # Edge intensity from treble - more dynamic range
+        # Lower divisor = more sensitive, higher power = more contrast
+        raw_edge = min(1.0, treble_energy / 1.5)  # More sensitive
+        target_edge = raw_edge ** 0.5  # Expand low end for better dynamic range
+        
+        # Smoothing
         attack = 0.7
-        decay = 0.15
+        decay = 0.2
         
         # Hue smoothing
         hue_diff = target_hue - LEDEffects._prev_hue
@@ -82,41 +91,49 @@ class LEDEffects:
         else:
             LEDEffects._prev_brightness += (target_brightness - LEDEffects._prev_brightness) * decay
         
-        # Treble smoothing for edge effect
-        if treble_val > LEDEffects._prev_treble:
-            LEDEffects._prev_treble += (treble_val - LEDEffects._prev_treble) * attack
+        # Edge smoothing
+        if target_edge > LEDEffects._prev_edge:
+            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * attack
         else:
-            LEDEffects._prev_treble += (treble_val - LEDEffects._prev_treble) * decay
+            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * decay
         
         # Core color (red/amber)
         r, g, b = colorsys.hsv_to_rgb(LEDEffects._prev_hue / 360.0, 1.0, LEDEffects._prev_brightness)
         core_color = (int(r * 255), int(g * 255), int(b * 255))
         
-        # Edge color (blue) - brightness follows treble
-        edge_brightness = LEDEffects._prev_treble ** 0.8  # Slightly compress
+        # Edge color (blue) - more dynamic brightness range
+        # Square the value to create more contrast between soft and loud treble
+        edge_brightness = LEDEffects._prev_edge ** 1.5  # Steeper curve = more dynamic range
         er, eg, eb = colorsys.hsv_to_rgb(240.0 / 360.0, 1.0, edge_brightness)
         edge_color = (int(er * 255), int(eg * 255), int(eb * 255))
         
-        # Edge size: how many LEDs from the outer edge get blue
-        # More treble = more edge coverage (up to 40% of strip)
-        edge_leds = int(NUM_LEDS_PER_STRIP * 0.4 * LEDEffects._prev_treble)
+        # Edge size: up to 60% of strip when treble is maxed
+        edge_leds = int(NUM_LEDS_PER_STRIP * 0.6 * LEDEffects._prev_edge)
+        
+        # Bass core for center strip - red expands from center based on bass energy
+        bass_core_size = int(NUM_LEDS_PER_STRIP * 0.5 * (bass_energy / (bass_energy + 0.5)))
+        bass_brightness = LEDEffects._prev_brightness
+        br, bg, bb = colorsys.hsv_to_rgb(0.0, 1.0, bass_brightness)  # Pure red
+        bass_core_color = (int(br * 255), int(bg * 255), int(bb * 255))
+        
+        center = NUM_LEDS_PER_STRIP // 2
         
         # Fill strips with edge effects
-        # Strip 0 (left): edge on RIGHT side (away from center)
-        # Strip 1 (center): no edge, pure core
-        # Strip 2 (right): edge on LEFT side (away from center)
-        
         for i in range(NUM_LEDS_PER_STRIP):
-            # Strip 0: edge at high indices (right side)
+            # Strip 0: edge at high indices (right side, away from center)
             if i >= NUM_LEDS_PER_STRIP - edge_leds:
                 strips[0][i] = edge_color
             else:
                 strips[0][i] = core_color
             
-            # Strip 1: pure core (no edge)
-            strips[1][i] = core_color
+            # Strip 1: bass core from center, else core color
+            dist_from_center = abs(i - center)
+            if dist_from_center < bass_core_size:
+                strips[1][i] = bass_core_color
+            else:
+                strips[1][i] = core_color
             
-            # Strip 2: edge at low indices (left side)
+            # Strip 2: edge at low indices (left side, away from center)
             if i < edge_leds:
                 strips[2][i] = edge_color
             else:

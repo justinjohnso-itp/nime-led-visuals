@@ -14,15 +14,20 @@ CHUNK_SIZE = 1024
 AUDIO_OUTPUT_DEVICE = "hw:1,0"  # Headphones output (Raspberry Pi), survives reboots
 AUDIO_INPUT_DEVICE = 1  # Focusrite 2i2 USB (from sounddevice.query_devices())
 
-# Frequency Bands (Hz) - 5 bands for nuanced color mapping
-# Maps to hue: Red (0°) → Yellow (60°) → Green (120°) → Cyan (180°) → Blue (240°)
+# Frequency Bands (Hz) - 5 legacy bands for compatibility
 FREQ_BANDS = [
-    (20, 90, "sub_bass"),       # Sub-bass: deep kick (red) - 90 Hz aligns better with mel centers
+    (20, 90, "sub_bass"),       # Sub-bass: deep kick (red)
     (90, 250, "bass"),          # Bass: foundational low end (red-orange)
-    (250, 1000, "low_mid"),     # Low-mid: presence (yellow-green)
-    (1000, 4000, "mid_high"),   # Mid-high: clarity (green-cyan)
-    (4000, 20000, "treble"),    # Treble: hi-hats, claps (blue-cyan)
+    (250, 1000, "low_mid"),     # Low-mid: presence (amber)
+    (1000, 2500, "mid_high"),   # Mid-high: clarity (lowered from 4000)
+    (2500, 20000, "treble"),    # Treble: hi-hats, cymbals (lowered from 4000)
 ]
+
+# 32-band spectrum for smooth color mapping
+# Logarithmically spaced from 20 Hz to 20 kHz
+import numpy as np
+NUM_SPECTRUM_BANDS = 32
+SPECTRUM_FREQS = np.logspace(np.log10(20), np.log10(20000), NUM_SPECTRUM_BANDS + 1)
 
 # Legacy band definitions for compatibility
 BASS_LOW = 20

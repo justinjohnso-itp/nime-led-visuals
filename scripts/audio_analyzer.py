@@ -13,6 +13,8 @@ from config import (
     FREQ_MIN,
     FREQ_MAX,
     FREQ_BANDS,
+    NUM_SPECTRUM_BANDS,
+    SPECTRUM_FREQS,
 )
 
 
@@ -23,29 +25,41 @@ class AudioAnalyzer:
         self.sample_rate = sample_rate
         self.smoothing = smoothing
 
-        # Per-band peak tracking
+        # Per-band peak tracking (legacy 5 bands)
         self.band_max = {name: 0.1 for _, _, name in FREQ_BANDS}
         self.decay_rate = 0.60
         self.prev_raw_volume = 0.0
 
+        # 32-band spectrum state
+        self.spectrum_max = np.full(NUM_SPECTRUM_BANDS, 0.1)
+        self.prev_spectrum = np.zeros(NUM_SPECTRUM_BANDS)
+
         # ADSR envelope
         self.envelope_value = 0.0
 
-        # FFT setup - use CHUNK_SIZE for fastest path
+        # FFT setup
         self.n_fft = CHUNK_SIZE
         self.window = np.hanning(self.n_fft).astype(np.float32)
 
         # Frequency axis for FFT bins
         self.freqs = rfftfreq(self.n_fft, d=1.0 / self.sample_rate)
 
-        # Pre-compute band bin indices (one-time cost)
+        # Pre-compute legacy band bin indices
         self.band_bins = {}
         for low_f, high_f, name in FREQ_BANDS:
             idx = np.where((self.freqs >= low_f) & (self.freqs < high_f))[0]
             self.band_bins[name] = idx if idx.size > 0 else None
 
+        # Pre-compute 32-band bin indices (logarithmically spaced)
+        self.spectrum_bins = []
+        for i in range(NUM_SPECTRUM_BANDS):
+            low_f = SPECTRUM_FREQS[i]
+            high_f = SPECTRUM_FREQS[i + 1]
+            idx = np.where((self.freqs >= low_f) & (self.freqs < high_f))[0]
+            self.spectrum_bins.append(idx if idx.size > 0 else None)
+
     def analyze(self, audio_chunk):
-        """Analyze one audio chunk using a single FFT (~2ms vs librosa's ~100ms)"""
+        """Analyze one audio chunk using a single FFT"""
         # Convert to float32 in [-1, 1]
         if audio_chunk.dtype == np.int16:
             audio = audio_chunk.astype(np.float32) / 32768.0
@@ -64,6 +78,8 @@ class AudioAnalyzer:
 
         # Noise gate - if below threshold, return silence
         if volume < NOISE_GATE_THRESHOLD:
+            # Decay the spectrum smoothly
+            self.prev_spectrum *= 0.9
             return {
                 "volume": 0.0,
                 "bass": 0.0,
@@ -76,7 +92,8 @@ class AudioAnalyzer:
                 "centroid": 0.0,
                 "bandwidth": 0.0,
                 "transient": 0.0,
-                "envelope": self.envelope_value * 0.9,  # Let envelope decay
+                "envelope": self.envelope_value * 0.9,
+                "spectrum": self.prev_spectrum.copy(),
             }
 
         # Ensure frame matches FFT size
@@ -86,12 +103,34 @@ class AudioAnalyzer:
         else:
             frame = audio[-self.n_fft:]
 
-        # Window and FFT (the fast part!)
+        # Window and FFT
         windowed = frame * self.window
         spectrum = rfft(windowed)
         power = spectrum.real ** 2 + spectrum.imag ** 2
 
-        # Band energies and normalization
+        # === 32-band spectrum with smoothing ===
+        spectrum_bands = np.zeros(NUM_SPECTRUM_BANDS)
+        for i, idx in enumerate(self.spectrum_bins):
+            if idx is not None and len(idx) > 0:
+                spectrum_bands[i] = float(np.mean(power[idx]))
+
+        # Update running max with decay
+        self.spectrum_max = np.maximum(spectrum_bands, self.spectrum_max * self.decay_rate)
+
+        # Normalize
+        spectrum_norm = spectrum_bands / np.maximum(self.spectrum_max, 0.01)
+        spectrum_norm = np.clip(spectrum_norm, 0.0, 1.0)
+
+        # Smooth with previous frame (reduces flickering)
+        attack = 0.6
+        decay = 0.2
+        for i in range(NUM_SPECTRUM_BANDS):
+            if spectrum_norm[i] > self.prev_spectrum[i]:
+                self.prev_spectrum[i] += (spectrum_norm[i] - self.prev_spectrum[i]) * attack
+            else:
+                self.prev_spectrum[i] += (spectrum_norm[i] - self.prev_spectrum[i]) * decay
+
+        # === Legacy 5-band output ===
         band_norms = {}
         total_energy = 0.0
 
@@ -102,11 +141,7 @@ class AudioAnalyzer:
                 energy = float(np.mean(power[idx]))
 
             total_energy += energy
-
-            # Update running max with decay
             self.band_max[name] = max(energy, self.band_max[name] * self.decay_rate)
-
-            # Normalize by running max
             norm = energy / max(self.band_max[name], 0.01)
             band_norms[name] = float(np.clip(norm, 0.0, 1.0))
 
@@ -123,7 +158,6 @@ class AudioAnalyzer:
         else:
             centroid_hz = 0.0
 
-        # Normalize centroid
         if centroid_hz <= 0.0:
             centroid_norm = 0.0
         else:
@@ -176,4 +210,5 @@ class AudioAnalyzer:
             "bandwidth": bandwidth_norm,
             "transient": transient,
             "envelope": self.envelope_value,
+            "spectrum": self.prev_spectrum.copy(),  # 32-band smoothed spectrum
         }
