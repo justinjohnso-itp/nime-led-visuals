@@ -48,9 +48,17 @@ class AudioAnalyzer:
         # Attack/Decay envelope state (for brightness envelope)
         self.envelope_value = 0.0  # Current brightness envelope (0-1)
         self.target_envelope = 0.0  # Target brightness (what we're trying to reach)
+        
+        # STFT overlap buffer for 50% overlapping windows (reduces spectral leakage)
+        # Using 50% overlap = half of chunk size
+        self.overlap_buffer = np.zeros(CHUNK_SIZE // 2)
+        self.window = np.hamming(CHUNK_SIZE)  # Hamming for STFT (slightly better for overlap-add)
 
     def analyze(self, audio_chunk):
         """Analyze audio chunk and return features
+        
+        Uses 50% overlapping STFT (Short-Time Fourier Transform) for better spectral leakage reduction.
+        This analyzes each frequency component at multiple phase positions, averaging out leakage artifacts.
         
         Args:
             audio_chunk: numpy array of audio samples (int16 or float32)
@@ -67,24 +75,27 @@ class AudioAnalyzer:
         # Apply input gain to boost quiet signals
         audio = audio * INPUT_GAIN
         
-        # Calculate RMS volume (before clipping)
+        # Calculate RMS volume on current chunk (before processing)
         volume = np.sqrt(np.mean(audio**2))
+        
+        # Build STFT frame: 50% overlap with previous chunk
+        # This reduces spectral leakage by having each frequency analyzed at multiple phase positions
+        stft_frame = np.concatenate([self.overlap_buffer, audio])
+        
+        # Apply Hamming window for STFT (provides good overlap-add properties)
+        stft_frame = stft_frame * self.window
+        
+        # Store second half for next chunk's overlap
+        self.overlap_buffer = audio[CHUNK_SIZE // 2:]
         
         # Apply noise gate - kill signals below threshold
         if volume < NOISE_GATE_THRESHOLD:
-            volume = 0.0
-            audio = np.zeros_like(audio)
-        else:
-            # Apply Tukey window (hybrid Hann+rectangular)
-            # Better than Hann for transient preservation while still reducing spectral leakage
-            # alpha=0.5 means 50% of window is tapered (good balance for audio)
-            window = np.blackman(len(audio))  # Slightly more aggressive leakage reduction than Hann
-            audio = audio * window
+            stft_frame = np.zeros_like(stft_frame)
 
-        # FFT with zero-padding for better frequency resolution
-        # Pad to 2x chunk size (improves spectral definition without changing latency)
-        padded_len = len(audio) * 2
-        fft = np.abs(np.fft.rfft(audio, n=padded_len))
+        # FFT with zero-padding for improved frequency resolution
+        # Pad to 2x chunk size (finer bin spacing, no latency cost)
+        padded_len = len(stft_frame) * 2
+        fft = np.abs(np.fft.rfft(stft_frame, n=padded_len))
         freqs = np.fft.rfftfreq(padded_len, 1 / self.sample_rate)
 
         # Extract all frequency bands
