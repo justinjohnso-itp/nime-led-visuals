@@ -10,13 +10,15 @@ platforms = ["linux-aarch64", "osx-arm64"]
 python = "3.13.*"
 numpy = ">=1.26.0"
 scipy = ">=1.13.0"
-sounddevice = ">=0.4.6"
 librosa = ">=0.11.0"
 adafruit-circuitpython-neopixel = ">=6.3.18"
 adafruit-circuitpython-led-animation = ">=2.12.4"
 
 [target.linux-aarch64.dependencies]
 rpi-ws281x = ">=5.0.0"
+
+[target.osx-arm64.dependencies]
+sounddevice = ">=0.4.6"
 
 [tasks]
 test-audio = "python scripts/analyze_audio.py music/test.mp3"
