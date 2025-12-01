@@ -14,11 +14,21 @@ CHUNK_SIZE = 1024
 AUDIO_OUTPUT_DEVICE = "hw:1,0"  # Headphones output (Raspberry Pi), survives reboots
 AUDIO_INPUT_DEVICE = 1  # Focusrite 2i2 USB (from sounddevice.query_devices())
 
-# Frequency Bands (Hz) - Rebalanced for even contribution
+# Frequency Bands (Hz) - 5 bands for nuanced color mapping
+# Maps to hue: Red (0°) → Yellow (60°) → Green (120°) → Cyan (180°) → Blue (240°)
+FREQ_BANDS = [
+    (20, 80, "sub_bass"),       # Sub-bass: deep kick (red)
+    (80, 250, "bass"),          # Bass: foundational low end (red-orange)
+    (250, 1000, "low_mid"),     # Low-mid: presence (yellow-green)
+    (1000, 4000, "mid_high"),   # Mid-high: clarity (green-cyan)
+    (4000, 20000, "treble"),    # Treble: hi-hats, claps (blue-cyan)
+]
+
+# Legacy band definitions for compatibility
 BASS_LOW = 20
-BASS_HIGH = 250      # Slightly wider for better bass presence
+BASS_HIGH = 250
 MID_LOW = 250
-MID_HIGH = 4000      # Wider mid range but less dominant
+MID_HIGH = 4000
 HIGH_LOW = 4000
 HIGH_HIGH = 20000
 FREQ_MIN = 20        # Sub-bass floor

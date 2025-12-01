@@ -5,7 +5,7 @@ import numpy as np
 from config import (
     COLORS, NUM_LEDS_PER_STRIP, NUM_STRIPS,
     HUE_RANGE, EDGE_HUE_SHIFT, CORE_FRACTION_MIN, CORE_FRACTION_MAX,
-    MIN_BRIGHTNESS, EDGE_FADE_RATE, TRANSIENT_BOOST, BRIGHTNESS_EXPONENT
+    MIN_BRIGHTNESS, EDGE_FADE_RATE, TRANSIENT_BOOST, BRIGHTNESS_EXPONENT, FREQ_BANDS
 )
 
 
@@ -55,18 +55,29 @@ class LEDEffects:
         # Total LED count across all strips
         total_leds = NUM_LEDS_PER_STRIP * NUM_STRIPS
         
-        # Determine hue based on which band is strongest (most energy)
-        # This creates a natural color shift: bass=red, mid=green, treble=blue
-        # Boost bass weight so it completely dominates (8x multiplier)
-        weighted_bass = bass * 8.0
-        total_energy = weighted_bass + mid + high + 0.001  # Avoid division by zero
-        bass_norm = weighted_bass / total_energy
-        mid_norm = mid / total_energy
-        high_norm = high / total_energy
+        # Map 5 frequency bands to hue spectrum (red → yellow → green → cyan → blue)
+        # Hue progression: 0° (red) → 60° (yellow) → 120° (green) → 180° (cyan) → 240° (blue)
+        # Boost lower frequencies to dominate color
+        band_weights = {
+            'sub_bass': features.get('sub_bass', 0) * 8.0,    # Deep red dominance
+            'bass': features.get('bass', 0) * 8.0,            # Red-orange
+            'low_mid': features.get('low_mid', 0) * 2.0,      # Yellow-green
+            'mid_high': features.get('mid_high', 0) * 1.0,    # Green-cyan
+            'treble': features.get('treble', 0) * 1.0,        # Blue-cyan
+        }
         
-        # Map band dominance to hue (0-360°)
-        # Red (0°) for bass, Green (120°) for mid, Blue (240°) for treble
-        hue = (bass_norm * 0 + mid_norm * 120 + high_norm * 240) % 360
+        total_energy = sum(band_weights.values()) + 0.001
+        
+        # Calculate weighted hue (0°, 60°, 120°, 180°, 240°)
+        hue_contributions = [
+            (band_weights.get('sub_bass', 0) / total_energy) * 0,      # 0° = red
+            (band_weights.get('bass', 0) / total_energy) * 30,         # 30° = red-orange
+            (band_weights.get('low_mid', 0) / total_energy) * 80,      # 80° = yellow-green
+            (band_weights.get('mid_high', 0) / total_energy) * 140,    # 140° = green-cyan
+            (band_weights.get('treble', 0) / total_energy) * 240,      # 240° = blue
+        ]
+        
+        hue = sum(hue_contributions) % 360
         
         # Brightness uses ADSR envelope + volume scaling
         # Envelope gives responsive peaks, volume gives overall loudness control

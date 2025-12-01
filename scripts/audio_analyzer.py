@@ -18,6 +18,7 @@ from config import (
     FREQ_MAX,
     INPUT_GAIN,
     NOISE_GATE_THRESHOLD,
+    FREQ_BANDS,
 )
 
 
@@ -35,11 +36,14 @@ class AudioAnalyzer:
         self.prev_centroid = 0.0
         self.prev_bandwidth = 0.0
         # Per-band peak tracking (independent normalization for each band)
+        self.band_max = {name: 0.1 for _, _, name in FREQ_BANDS}
+        self.decay_rate = 0.88  # Moderate decay - keeps dynamic range while killing noise
+        self.prev_raw_volume = 0.0  # For transient detection
+        
+        # Legacy band maxes for backward compatibility
         self.bass_max = 0.1
         self.mid_max = 0.1
         self.high_max = 0.1
-        self.decay_rate = 0.88  # Moderate decay - keeps dynamic range while killing noise
-        self.prev_raw_volume = 0.0  # For transient detection
         
         # Attack/Decay envelope state (for brightness envelope)
         self.envelope_value = 0.0  # Current brightness envelope (0-1)
@@ -75,26 +79,28 @@ class AudioAnalyzer:
         fft = np.abs(np.fft.rfft(audio))
         freqs = np.fft.rfftfreq(len(audio), 1 / self.sample_rate)
 
-        # Extract frequency bands (no log scaling - keep it raw and responsive)
-        bass = self._get_band_energy(fft, freqs, BASS_LOW, BASS_HIGH)
-        mid = self._get_band_energy(fft, freqs, MID_LOW, MID_HIGH)
-        high = self._get_band_energy(fft, freqs, HIGH_LOW, HIGH_HIGH)
-
-        # Update running max for EACH band independently (allows all bands to shine)
-        self.bass_max = max(bass, self.bass_max * self.decay_rate)
-        self.mid_max = max(mid, self.mid_max * self.decay_rate)
-        self.high_max = max(high, self.high_max * self.decay_rate)
-
-        # Normalize each band by its OWN max (per-band normalization)
-        # This lets treble peaks show as bright blue, bass as red, mid as green
-        bass_norm = bass / max(self.bass_max, 0.001)
-        mid_norm = mid / max(self.mid_max, 0.001)
-        high_norm = high / max(self.high_max, 0.001)
+        # Extract all frequency bands
+        band_energies = {}
+        band_norms = {}
+        for low_freq, high_freq, name in FREQ_BANDS:
+            energy = self._get_band_energy(fft, freqs, low_freq, high_freq)
+            band_energies[name] = energy
+            
+            # Update running max independently per band
+            self.band_max[name] = max(energy, self.band_max[name] * self.decay_rate)
+            
+            # Normalize by own max
+            norm = energy / max(self.band_max[name], 0.001)
+            band_norms[name] = np.clip(norm, 0, 1)
         
-        # Clip to 0-1 range
-        bass_norm = np.clip(bass_norm, 0, 1)
-        mid_norm = np.clip(mid_norm, 0, 1)
-        high_norm = np.clip(high_norm, 0, 1)
+        # Legacy band extraction for effects.py compatibility
+        bass = band_energies.get('bass', 0.0)
+        mid = (band_energies.get('low_mid', 0.0) + band_energies.get('mid_high', 0.0)) / 2
+        high = band_energies.get('treble', 0.0)
+        
+        bass_norm = band_norms.get('bass', 0.0)
+        mid_norm = (band_norms.get('low_mid', 0.0) + band_norms.get('mid_high', 0.0)) / 2
+        high_norm = band_norms.get('treble', 0.0)
 
         # Calculate spectral centroid (dominant frequency) and bandwidth
         centroid, bandwidth = self._calculate_spectral_features(fft, freqs)
@@ -141,6 +147,12 @@ class AudioAnalyzer:
             "bass": bass_norm,
             "mid": mid_norm,
             "high": high_norm,
+            # All 5 frequency bands for granular color control
+            "sub_bass": band_norms.get('sub_bass', 0.0),
+            "bass": band_norms.get('bass', 0.0),
+            "low_mid": band_norms.get('low_mid', 0.0),
+            "mid_high": band_norms.get('mid_high', 0.0),
+            "treble": band_norms.get('treble', 0.0),
             "centroid": centroid,  # Normalized to 0-1 (Hz to 0-1 range)
             "bandwidth": bandwidth,  # Normalized to 0-1
             "transient": transient,  # 0-1, higher = sudden loud event
