@@ -71,7 +71,8 @@ class AudioAnalyzer:
         # Only analyze when buffer has enough samples for melspectrogram
         # n_fft=4096 needs at least 4096 samples to produce any output
         if len(self.buffer) < self.n_fft:
-            return self._empty_features()
+            # Return real volume while buffering (don't discard it)
+            return self._empty_features(volume=volume)
         
         # Compute mel-spectrogram on accumulated buffer
         try:
@@ -179,15 +180,14 @@ class AudioAnalyzer:
             "envelope": self.envelope_value,
         }
 
-    def _empty_features(self):
-        """Return silence features while buffering"""
+    def _empty_features(self, volume=0.0):
+        """Return silence features while buffering, preserving real volume"""
         return {
-            "volume": 0.0,
+            "volume": volume,
             "bass": 0.0,
             "mid": 0.0,
             "high": 0.0,
             "sub_bass": 0.0,
-            "bass": 0.0,
             "low_mid": 0.0,
             "mid_high": 0.0,
             "treble": 0.0,
