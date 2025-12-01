@@ -72,10 +72,8 @@ class LEDEffects:
         # Brightness from envelope
         target_brightness = max(MIN_BRIGHTNESS, envelope ** BRIGHTNESS_EXPONENT)
         
-        # Edge intensity from treble - more dynamic range
-        # Lower divisor = more sensitive, higher power = more contrast
-        raw_edge = min(1.0, treble_energy / 1.5)  # More sensitive
-        target_edge = raw_edge ** 0.5  # Expand low end for better dynamic range
+        # Edge intensity from treble - more dynamic range via contrast, not sensitivity
+        target_edge = min(1.0, treble_energy / 4.0)  # Less sensitive (need more treble to trigger)
         
         # Smoothing
         attack = 0.7
@@ -101,9 +99,8 @@ class LEDEffects:
         r, g, b = colorsys.hsv_to_rgb(LEDEffects._prev_hue / 360.0, 1.0, LEDEffects._prev_brightness)
         core_color = (int(r * 255), int(g * 255), int(b * 255))
         
-        # Edge color (blue) - more dynamic brightness range
-        # Square the value to create more contrast between soft and loud treble
-        edge_brightness = LEDEffects._prev_edge ** 1.5  # Steeper curve = more dynamic range
+        # Edge color (blue) - steep curve for dynamic range (quiet=dim, loud=bright)
+        edge_brightness = LEDEffects._prev_edge ** 2.0  # Squared for high contrast
         er, eg, eb = colorsys.hsv_to_rgb(240.0 / 360.0, 1.0, edge_brightness)
         edge_color = (int(er * 255), int(eg * 255), int(eb * 255))
         
