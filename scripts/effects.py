@@ -55,6 +55,13 @@ class LEDEffects:
         # Total LED count across all strips
         total_leds = NUM_LEDS_PER_STRIP * NUM_STRIPS
         
+        # Get the 5 bands to find strongest for core_fraction
+        sub_bass_val = features.get('sub_bass', 0)
+        bass_val = features.get('bass', 0)
+        low_mid_val = features.get('low_mid', 0)
+        mid_high_val = features.get('mid_high', 0)
+        treble_val = features.get('treble', 0)
+        
         # Simple red-blue mapping: bass = red (0°), treble = blue (240°)
         # Ignore midrange to prevent green/yellow dominance
         bass_energy = sub_bass_val + bass_val  # Combine both bass bands
@@ -66,13 +73,6 @@ class LEDEffects:
         
         # Hue: pure red (0°) when bass dominates, pure blue (240°) when treble dominates
         hue = (treble_weight * 240.0) % 360
-        
-        # Get the 5 bands to find strongest for core_fraction
-        sub_bass_val = features.get('sub_bass', 0)
-        bass_val = features.get('bass', 0)
-        low_mid_val = features.get('low_mid', 0)
-        mid_high_val = features.get('mid_high', 0)
-        treble_val = features.get('treble', 0)
         
         # Brightness uses ADSR envelope + volume scaling
         # Envelope gives responsive peaks, volume gives overall loudness control
