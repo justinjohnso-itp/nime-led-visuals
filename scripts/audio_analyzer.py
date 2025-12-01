@@ -63,10 +63,9 @@ class AudioAnalyzer:
         # Accumulate in buffer
         self.buffer = np.concatenate([self.buffer, audio])
         
-        # Apply noise gate to entire buffer if current chunk is silent
+        # Apply noise gate (gate volume, but DON'T wipe buffer - that prevents it from filling)
         if volume < NOISE_GATE_THRESHOLD:
             volume = 0.0
-            self.buffer = np.zeros_like(self.buffer)
         
         # Only analyze when buffer has enough samples for melspectrogram
         # n_fft=4096 needs at least 4096 samples to produce any output
