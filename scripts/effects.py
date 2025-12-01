@@ -1,6 +1,12 @@
 """Visual effects that map audio features to LED patterns"""
 
-from config import COLORS
+import colorsys
+import numpy as np
+from config import (
+    COLORS, NUM_LEDS_PER_STRIP, NUM_STRIPS,
+    HUE_RANGE, EDGE_HUE_SHIFT, CORE_FRACTION_MIN, CORE_FRACTION_MAX,
+    MIN_BRIGHTNESS, EDGE_FADE_RATE
+)
 
 
 class LEDEffects:
@@ -29,17 +35,85 @@ class LEDEffects:
 
     @staticmethod
     def frequency_spectrum(strips, features):
-        """Show three frequency bands on three daisy-chained strips
+        """Show dominant frequencies across all strips with color gradient
+        
+        Maps centroid frequency to a color (red=low, blue=high) and spreads based on bandwidth.
+        Most strips show the dominant frequency, edges show secondary frequencies.
         
         Args:
-            strips: list of 3 PixelSubset objects [bass, mid, high]
-            features: dict from audio_analyzer with bass/mid/high (0.0-1.0)
+            strips: list of 3 PixelSubset objects [left, center, right]
+            features: dict with centroid, bandwidth, volume (all 0.0-1.0)
         """
-        colors = [COLORS['bass'], COLORS['mid'], COLORS['high']]
-        bands = [features['bass'], features['mid'], features['high']]
-
-        for strip, energy, color in zip(strips, bands, colors):
-            LEDEffects.vu_meter(strip, energy, color)
+        centroid = features.get('centroid', 0.0)  # 0=bass, 1=treble
+        bandwidth = features.get('bandwidth', 0.3)  # Spread of energetic region
+        volume = features.get('volume', 0.0)
+        
+        # Total LED count across all strips
+        total_leds = NUM_LEDS_PER_STRIP * NUM_STRIPS
+        
+        # Map centroid (0-1) to frequency hue
+        # 0 = Red (bass), 1 = Blue (treble)
+        hue = centroid * HUE_RANGE  # Degrees
+        
+        # Brightness follows volume
+        brightness = max(MIN_BRIGHTNESS, volume)
+        
+        # Build color distribution across all LEDs
+        # Bandwidth controls how much of the strip shows the dominant frequency
+        # Low bandwidth (0.2) = narrow core, wider edge blending
+        # High bandwidth (0.9) = wider core, narrower edge blending
+        core_fraction = CORE_FRACTION_MIN + ((CORE_FRACTION_MAX - CORE_FRACTION_MIN) * bandwidth)
+        
+        led_colors = []
+        for led_idx in range(total_leds):
+            # Distance from center (in normalized 0-1 space)
+            center_pos = total_leds / 2.0
+            distance_from_center = abs(led_idx - center_pos) / center_pos
+            
+            # Blend distance: edges show adjacent frequencies
+            if distance_from_center < core_fraction:
+                # Core region: dominant frequency
+                current_hue = hue
+                edge_fade = 1.0
+            else:
+                # Edge region: blend to adjacent frequencies
+                edge_region = 1.0 - core_fraction
+                edge_factor = (distance_from_center - core_fraction) / max(edge_region, 0.01)  # 0-1 in edge region
+                edge_factor = np.clip(edge_factor, 0, 1)
+                
+                # Determine which side we're on and blend appropriately
+                if led_idx > center_pos:
+                    # Right edge: fade toward higher frequencies (more blue)
+                    current_hue = hue + (edge_factor * EDGE_HUE_SHIFT)
+                else:
+                    # Left edge: fade toward lower frequencies (more red)
+                    current_hue = hue - (edge_factor * EDGE_HUE_SHIFT)
+                
+                edge_fade = 1.0 - (edge_factor * EDGE_FADE_RATE)
+            
+            # Clamp hue to valid range
+            current_hue = np.clip(current_hue, 0, 360)
+            
+            # Convert HSV to RGB
+            r, g, b = colorsys.hsv_to_rgb(current_hue / 360.0, 1.0, brightness * edge_fade)
+            color = (int(r * 255), int(g * 255), int(b * 255))
+            led_colors.append(color)
+        
+        # Distribute colors across three strips
+        # Left strip (reversed: outer=treble, inner=bass)
+        for i, strip_idx in enumerate(range(NUM_LEDS_PER_STRIP)):
+            actual_idx = NUM_LEDS_PER_STRIP - 1 - strip_idx  # Reverse
+            strips[0][i] = led_colors[actual_idx]
+        
+        # Center strip (pure dominance region)
+        for i in range(NUM_LEDS_PER_STRIP):
+            center_idx = NUM_LEDS_PER_STRIP + i
+            strips[1][i] = led_colors[center_idx]
+        
+        # Right strip (normal: inner=bass, outer=treble)
+        for i in range(NUM_LEDS_PER_STRIP):
+            right_idx = 2 * NUM_LEDS_PER_STRIP + i
+            strips[2][i] = led_colors[right_idx]
 
     @staticmethod
     def pulse_effect(strip, volume, color=(255, 255, 255)):
@@ -111,7 +185,6 @@ class LEDEffects:
         Returns:
             (r, g, b) tuple 0-255
         """
-        import colorsys
         r, g, b = colorsys.hsv_to_rgb(h / 360.0, s, v)
         return (int(r * 255), int(g * 255), int(b * 255))
 

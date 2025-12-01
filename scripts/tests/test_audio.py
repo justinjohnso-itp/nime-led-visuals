@@ -2,14 +2,16 @@
 """Analyze audio file and collect statistics for visualization tuning"""
 
 import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 import time
 import numpy as np
 import platform
 import subprocess
-import os
 from audio_input import get_audio_input
 from audio_analyzer import AudioAnalyzer
-from config import SAMPLE_RATE, CHUNK_SIZE, AUDIO_DEVICE
+from config import SAMPLE_RATE, CHUNK_SIZE, AUDIO_OUTPUT_DEVICE
 
 def main(filepath):
     print(f"Analyzing: {filepath}\n")
@@ -25,8 +27,8 @@ def main(filepath):
             ffmpeg_proc = subprocess.Popen(['ffmpeg', '-i', filepath, '-f', 's16le', '-ar', '44100', '-ac', '2', '-'], 
                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             aplay_cmd = ['aplay', '-f', 'S16_LE', '-r', '44100', '-c', '2']
-            if AUDIO_DEVICE:
-                aplay_cmd = ['aplay', '-D', AUDIO_DEVICE, '-f', 'S16_LE', '-r', '44100', '-c', '2']
+            if AUDIO_OUTPUT_DEVICE:
+                aplay_cmd = ['aplay', '-D', AUDIO_OUTPUT_DEVICE, '-f', 'S16_LE', '-r', '44100', '-c', '2']
             aplay_proc = subprocess.Popen(aplay_cmd, 
                                          stdin=ffmpeg_proc.stdout, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
             ffmpeg_proc.stdout.close()
@@ -40,6 +42,8 @@ def main(filepath):
     basses = []
     mids = []
     highs = []
+    centroids = []
+    bandwidths = []
     
     chunk_count = 0
     first_chunk = True
@@ -55,8 +59,11 @@ def main(filepath):
         basses.append(features['bass'])
         mids.append(features['mid'])
         highs.append(features['high'])
+        centroids.append(features['centroid'])
+        bandwidths.append(features['bandwidth'])
 
-        print(f"  Chunk {chunk_count}: Vol={features['volume']:.3f} Bass={features['bass']:.3f} Mid={features['mid']:.3f} High={features['high']:.3f}")
+        centroid_hz = 20 * (20000 / 20) ** features['centroid']
+        print(f"  Chunk {chunk_count}: Vol={features['volume']:.3f} Centroid={centroid_hz:6.0f}Hz BW={features['bandwidth']:.3f}")
 
         # Break after one complete pass through the file
         if first_chunk:
@@ -76,7 +83,7 @@ def main(filepath):
     print("AUDIO ANALYSIS STATISTICS")
     print("="*60)
 
-    for name, values in [('Volume', volumes), ('Bass', basses), ('Mid', mids), ('High', highs)]:
+    for name, values in [('Volume', volumes), ('Bass', basses), ('Mid', mids), ('High', highs), ('Centroid', centroids), ('Bandwidth', bandwidths)]:
         arr = np.array(values)
         print(f"\n{name}:")
         print(f"  Min:    {arr.min():.4f}")

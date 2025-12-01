@@ -21,6 +21,8 @@ MID_LOW = 200
 MID_HIGH = 2000
 HIGH_LOW = 2000
 HIGH_HIGH = 20000
+FREQ_MIN = 20        # Sub-bass floor
+FREQ_MAX = 20000     # Treble ceiling
 
 # Colors (RGB tuples) - mapped to frequency bands
 COLORS = {
@@ -40,3 +42,11 @@ COLORS = {
 # Effect Settings
 FPS_TARGET = 30
 SMOOTHING_FACTOR = 0.2  # 0.0-1.0, higher = snappier response
+
+# Dominant Frequency Visualization Parameters
+HUE_RANGE = 240              # Red (0°) to Blue (240°) covers bass to treble
+EDGE_HUE_SHIFT = 40          # ±40° hue shift at edges (adjacent frequency blending)
+CORE_FRACTION_MIN = 0.4      # Minimum core width (40%, for narrow tones)
+CORE_FRACTION_MAX = 0.8      # Maximum core width (80%, for broad spectrum)
+MIN_BRIGHTNESS = 0.3         # Keep colors visible even in quiet passages
+EDGE_FADE_RATE = 0.4         # Brightness fades to 60% at edges

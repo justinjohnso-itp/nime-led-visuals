@@ -158,7 +158,8 @@ def main(audio_source='live', filepath=None):
     try:
         while True:
             # Print current features for monitoring
-            print(f"Volume: {shared_features['volume']:.3f} | Bass: {shared_features['bass']:.3f} | Mid: {shared_features['mid']:.3f} | High: {shared_features['high']:.3f}", end='\r')
+            centroid_hz = 20 * (20000 / 20) ** shared_features['centroid']  # Convert back to Hz approximation
+            print(f"Vol: {shared_features['volume']:.2f} | Centroid: {centroid_hz:6.0f}Hz | BW: {shared_features['bandwidth']:.2f}", end='\r')
             time.sleep(0.1)  # Update display every 100ms
 
     except KeyboardInterrupt:
