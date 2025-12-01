@@ -61,7 +61,7 @@ def main(audio_source='live', filepath=None):
         if platform.system() == 'Darwin':
             subprocess.Popen(['afplay', filepath])
         elif platform.system() == 'Linux':
-            subprocess.Popen(['mpg123', '-a', 'alsa', filepath])
+            subprocess.Popen(['mpg123', '-o', 'alsa:hw:1,0', filepath])
         time.sleep(0.5)  # Give playback time to start
         print("🔊 Playing audio...")
 
