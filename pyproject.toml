@@ -21,6 +21,7 @@ run-file = "python scripts/main.py --file test.mp3"
 run-live = "bash run_live.sh"
 
 [tool.pixi.pypi-dependencies]
+adafruit-blinka = {version = ">=8.0.0", markers = "platform_machine == 'aarch64'"}
 rpi-ws281x = {version = ">=5.0.0", markers = "platform_machine == 'aarch64'"}
 adafruit-circuitpython-neopixel = {version = ">=6.3.18", markers = "platform_machine == 'aarch64'"}
 adafruit-circuitpython-led-animation = {version = ">=2.12.4", markers = "platform_machine == 'aarch64'"}
