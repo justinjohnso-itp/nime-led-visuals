@@ -21,7 +21,11 @@ def main(filepath):
         if platform.system() == 'Darwin':
             subprocess.Popen(['afplay', filepath])
         elif platform.system() == 'Linux':
-            subprocess.Popen(['mpg123', '-o', 'alsa:hw:1,0', filepath])
+            # Decode MP3 with ffmpeg and pipe to aplay
+            ffmpeg_proc = subprocess.Popen(['ffmpeg', '-i', filepath, '-f', 's16le', '-acodec', 'pcm_s16le', '-ar', '44100', '-'], 
+                                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            subprocess.Popen(['aplay'], stdin=ffmpeg_proc.stdout, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            ffmpeg_proc.stdout.close()
         time.sleep(0.5)  # Give playback time to start
         print("Playing audio...\n")
     except Exception as e:
