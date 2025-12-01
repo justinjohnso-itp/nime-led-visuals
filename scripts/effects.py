@@ -36,17 +36,18 @@ class LEDEffects:
     # Class-level state for smoothing
     _prev_hue = 0.0
     _prev_brightness = 0.0
+    _prev_treble = 0.0
     
     @staticmethod
     def frequency_spectrum(strips, features):
-        """Fast frequency spectrum visualization - stage-friendly colors
+        """Fast frequency spectrum with edge effects
         
-        Color palette: Red (bass) → Amber (low-mid) → Blue (treble)
-        No greens/yellows - they look bad on stage
+        Core: Red (bass) → Amber (low-mid)
+        Edges: Blue (treble) - OVERPOWERS core color
         
         Args:
             strips: list of 3 PixelSubset objects [left, center, right]
-            features: dict with bass, mid, high, volume (all 0.0-1.0)
+            features: dict with frequency bands (all 0.0-1.0)
         """
         # Extract features
         sub_bass_val = features.get('sub_bass', 0.0)
@@ -55,37 +56,25 @@ class LEDEffects:
         treble_val = features.get('treble', 0.0)
         envelope = features.get('envelope', 0.0)
         
-        # Weighted color selection - skip green/yellow entirely
-        # Red (0°) for bass, Amber (30°) for low-mids, Blue (240°) for treble
+        # Core color: Red (0°) for bass, Amber (30°) for low-mids
         bass_energy = sub_bass_val + bass_val
-        
-        # Calculate blend weights
-        total = bass_energy + low_mid_val + treble_val + 0.001
+        total = bass_energy + low_mid_val + 0.001
         bass_weight = bass_energy / total
         mid_weight = low_mid_val / total
-        treble_weight = treble_val / total
         
-        # Map to stage-friendly hues: Red(0°) → Amber(30°) → Blue(240°)
-        # Bass pulls toward red, low-mid pulls toward amber, treble pulls toward blue
-        target_hue = (bass_weight * 0.0) + (mid_weight * 30.0) + (treble_weight * 240.0)
+        # Core hue stays in red-amber range (0° to 30°)
+        target_hue = (bass_weight * 0.0) + (mid_weight * 30.0)
         
         # Brightness from envelope
         target_brightness = max(MIN_BRIGHTNESS, envelope ** BRIGHTNESS_EXPONENT)
         
         # Smoothing (attack/decay)
-        attack = 0.7   # Fast attack
-        decay = 0.15   # Slower decay
+        attack = 0.7
+        decay = 0.15
         
         # Hue smoothing
         hue_diff = target_hue - LEDEffects._prev_hue
-        if abs(hue_diff) > 180:  # Handle wrap-around
-            if hue_diff > 0:
-                hue_diff -= 360
-            else:
-                hue_diff += 360
-        hue_rate = attack if abs(hue_diff) > 0 else decay
-        LEDEffects._prev_hue += hue_diff * hue_rate
-        LEDEffects._prev_hue = LEDEffects._prev_hue % 360
+        LEDEffects._prev_hue += hue_diff * (attack if hue_diff > 0 else decay)
         
         # Brightness smoothing
         if target_brightness > LEDEffects._prev_brightness:
@@ -93,13 +82,45 @@ class LEDEffects:
         else:
             LEDEffects._prev_brightness += (target_brightness - LEDEffects._prev_brightness) * decay
         
-        # Convert HSV to RGB
-        r, g, b = colorsys.hsv_to_rgb(LEDEffects._prev_hue / 360.0, 1.0, LEDEffects._prev_brightness)
-        base_color = (int(r * 255), int(g * 255), int(b * 255))
+        # Treble smoothing for edge effect
+        if treble_val > LEDEffects._prev_treble:
+            LEDEffects._prev_treble += (treble_val - LEDEffects._prev_treble) * attack
+        else:
+            LEDEffects._prev_treble += (treble_val - LEDEffects._prev_treble) * decay
         
-        # Fill all strips
-        for strip in strips:
-            strip.fill(base_color)
+        # Core color (red/amber)
+        r, g, b = colorsys.hsv_to_rgb(LEDEffects._prev_hue / 360.0, 1.0, LEDEffects._prev_brightness)
+        core_color = (int(r * 255), int(g * 255), int(b * 255))
+        
+        # Edge color (blue) - brightness follows treble
+        edge_brightness = LEDEffects._prev_treble ** 0.8  # Slightly compress
+        er, eg, eb = colorsys.hsv_to_rgb(240.0 / 360.0, 1.0, edge_brightness)
+        edge_color = (int(er * 255), int(eg * 255), int(eb * 255))
+        
+        # Edge size: how many LEDs from the outer edge get blue
+        # More treble = more edge coverage (up to 40% of strip)
+        edge_leds = int(NUM_LEDS_PER_STRIP * 0.4 * LEDEffects._prev_treble)
+        
+        # Fill strips with edge effects
+        # Strip 0 (left): edge on RIGHT side (away from center)
+        # Strip 1 (center): no edge, pure core
+        # Strip 2 (right): edge on LEFT side (away from center)
+        
+        for i in range(NUM_LEDS_PER_STRIP):
+            # Strip 0: edge at high indices (right side)
+            if i >= NUM_LEDS_PER_STRIP - edge_leds:
+                strips[0][i] = edge_color
+            else:
+                strips[0][i] = core_color
+            
+            # Strip 1: pure core (no edge)
+            strips[1][i] = core_color
+            
+            # Strip 2: edge at low indices (left side)
+            if i < edge_leds:
+                strips[2][i] = edge_color
+            else:
+                strips[2][i] = core_color
 
     @staticmethod
     def pulse_effect(strip, volume, color=(255, 255, 255)):
