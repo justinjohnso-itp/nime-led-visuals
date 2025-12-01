@@ -73,7 +73,7 @@ class LiveAudioInput(AudioInput):
 
         print(f"Opening audio device {device}...")
         self.stream = sd.InputStream(
-            channels=1,
+            channels=2,  # Stereo input
             samplerate=sample_rate,
             blocksize=chunk_size,
             device=device
@@ -82,8 +82,11 @@ class LiveAudioInput(AudioInput):
         print("Audio stream started")
 
     def read_chunk(self):
-        """Return next chunk from live audio"""
+        """Return next chunk from live audio (stereo → mono average)"""
         data, _ = self.stream.read(self.chunk_size)
+        # Average stereo channels to mono
+        if data.ndim > 1:
+            data = np.mean(data, axis=1)
         return np.int16(data.flatten() * 32767)
 
     def close(self):

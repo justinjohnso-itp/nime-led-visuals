@@ -9,7 +9,7 @@ import numpy as np
 import subprocess
 import os
 
-from config import NUM_LEDS_PER_STRIP, NUM_STRIPS, LED_BRIGHTNESS, SAMPLE_RATE, CHUNK_SIZE, AUDIO_DEVICE
+from config import NUM_LEDS_PER_STRIP, NUM_STRIPS, LED_BRIGHTNESS, SAMPLE_RATE, CHUNK_SIZE, AUDIO_INPUT_DEVICE
 from audio_input import get_audio_input
 from audio_analyzer import AudioAnalyzer
 
@@ -114,22 +114,14 @@ def main(audio_source='live', filepath=None):
         strips = None
 
     print("🎵 Initializing audio input...")
-    audio = get_audio_input(source=audio_source, filepath=filepath, sample_rate=SAMPLE_RATE, chunk_size=CHUNK_SIZE)
+    audio = get_audio_input(source=audio_source, filepath=filepath, sample_rate=SAMPLE_RATE, chunk_size=CHUNK_SIZE, device=AUDIO_INPUT_DEVICE)
 
     print("📊 Initializing audio analyzer...")
     analyzer = AudioAnalyzer(sample_rate=SAMPLE_RATE)
     
-    # Play audio file if provided (file input only for visualization sync)
+    # For file input, audio is pre-loaded by librosa - no playback needed
     if audio_source == 'file':
-        if platform.system() == 'Darwin':
-            subprocess.Popen(['afplay', filepath])
-        elif platform.system() == 'Linux':
-            # Note: Audio playback from file via ffmpeg | aplay is unreliable
-            # For now, skipping audio playback - analysis still works on loaded file
-            # To re-enable: check audio device with `aplay -l` and verify hw:1,0 works
-            print("   (Audio playback disabled - use live input for audio)")
-        time.sleep(0.5)  # Give playback time to start
-        print("🔊 Analyzing audio...")
+        print("🔊 Analyzing audio file...")
 
     # Shared state for communication between threads
     shared_features = {
