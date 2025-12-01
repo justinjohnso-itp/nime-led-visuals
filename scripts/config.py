@@ -35,7 +35,7 @@ FREQ_MIN = 20        # Sub-bass floor
 FREQ_MAX = 20000     # Treble ceiling
 
 # Audio Input Scaling
-INPUT_GAIN = 5.0     # Amplify quiet input signals (5x gain)
+INPUT_GAIN = 15.0     # Librosa normalizes audio to quiet levels; use higher gain (15x)
 
 # Colors (RGB tuples) - mapped to frequency bands
 COLORS = {

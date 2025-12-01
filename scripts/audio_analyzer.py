@@ -82,12 +82,18 @@ class AudioAnalyzer:
         # Calculate volume on current chunk
         volume = np.sqrt(np.mean(audio**2))
         
+        # Debug raw audio levels
+        audio_raw = audio_chunk.astype(np.float32)
+        if audio_chunk.dtype == np.int16:
+            audio_raw = audio_raw / 32768.0
+        audio_peak = np.max(np.abs(audio_raw))
+        
         # Accumulate in buffer
         self.audio_buffer = np.concatenate([self.audio_buffer, audio])
         
         # Debug: log buffer status every ~1 second (43 chunks)
         if len(self.audio_buffer) % (CHUNK_SIZE * 43) < CHUNK_SIZE:
-            print(f"  Buffer: {len(self.audio_buffer)}/{self.min_buffer_size} samples, volume={volume:.3f}, gate={NOISE_GATE_THRESHOLD}")
+            print(f"  Buffer: {len(self.audio_buffer)}/{self.min_buffer_size}, vol={volume:.4f}, peak={audio_peak:.4f}, gain={INPUT_GAIN}, gate={NOISE_GATE_THRESHOLD}")
         
         # Only analyze when we have enough buffered samples
         if len(self.audio_buffer) < self.min_buffer_size:
