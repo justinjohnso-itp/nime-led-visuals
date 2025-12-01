@@ -128,7 +128,9 @@ def main(audio_source='live', filepath=None):
         'volume': 0.0,
         'bass': 0.0,
         'mid': 0.0,
-        'high': 0.0
+        'high': 0.0,
+        'centroid': 0.0,
+        'bandwidth': 0.0
     }
     stop_event = threading.Event()
 
