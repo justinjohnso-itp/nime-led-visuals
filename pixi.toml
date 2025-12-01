@@ -1,0 +1,25 @@
+[workspace]
+name = "nime-led-visuals"
+version = "0.1.0"
+description = "Audio-reactive LED visualization for Daisy Seed on Raspberry Pi"
+authors = ["Justin Johnson <justinaugustejohnson@gmail.com>"]
+channels = ["conda-forge"]
+platforms = ["linux-aarch64", "osx-arm64"]
+
+[dependencies]
+python = "3.13.*"
+numpy = ">=1.26.0"
+scipy = ">=1.13.0"
+librosa = ">=0.11.0"
+
+[tasks]
+test-audio = "python scripts/test_audio.py music/test.mp3"
+test-leds = "bash run_leds.sh"
+run-file = "python scripts/main.py --file test.mp3"
+run-live = "bash run_live.sh"
+
+[target.linux-aarch64.pypi-dependencies]
+adafruit-blinka = ">=8.0.0"
+rpi-ws281x = ">=5.0.0"
+adafruit-circuitpython-neopixel = ">=6.3.18"
+adafruit-circuitpython-led-animation = ">=2.12.4"
