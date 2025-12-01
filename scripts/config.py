@@ -67,10 +67,8 @@ NOISE_GATE_THRESHOLD = 0.02   # Mute signals quieter than 2% RMS to kill input n
 # Dominant Frequency Visualization Parameters
 HUE_RANGE = 240              # Red (0°) to Blue (240°) covers bass to treble
 EDGE_HUE_SHIFT = 120         # ±120° hue shift at edges (aggressive treble bleed for hi-hats/claps)
-CORE_FRACTION_MIN = 0.15     # Minimum core width (15%, very narrow for max edge bleed)
-CORE_FRACTION_MAX = 0.4      # Maximum core width (40%, narrower for more edge bleed)
-BASS_CENTER_FRACTION = 0.95  # Max distance bass radiates from center of middle strip (95%, almost to edges)
-BASS_RADIANCE_STRENGTH = 3.0 # Multiplier for bass radiance intensity (higher = more bass dominance)
+CORE_FRACTION_MIN = 0.2      # Minimum core width (20%, narrower for more edge bleed)
+CORE_FRACTION_MAX = 0.5      # Maximum core width (50%, narrower for more edge bleed)
 MIN_BRIGHTNESS = 0.01        # Even lower floor (nearly off) for maximum contrast
-EDGE_FADE_RATE = 0.2         # Brightness fades less at edges (80% brightness at edge instead of 60%)
+EDGE_FADE_RATE = 0.25        # Brightness fades to 75% at edges for more visible edge bleed
 TRANSIENT_BOOST = 0.5        # Extra brightness boost for sudden volume increases (increased)
