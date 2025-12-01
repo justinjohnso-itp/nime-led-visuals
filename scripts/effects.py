@@ -99,15 +99,23 @@ class LEDEffects:
                 edge_factor = (distance_from_center - core_fraction) / edge_region
                 edge_factor = np.clip(edge_factor, 0, 1)
                 
-                if is_right_edge and position_in_strip > 0.5:
-                    # Right-side edge: fade toward higher frequencies (more blue)
-                    current_hue = hue + (edge_factor * EDGE_HUE_SHIFT)
-                elif is_left_edge and position_in_strip < 0.5:
-                    # Left-side edge (mirrored): fade toward lower frequencies (more red)
-                    current_hue = hue - (edge_factor * EDGE_HUE_SHIFT)
+                # Determine which edge we're on based on position
+                if position_in_strip > 0.5:
+                    # Right half of strip
+                    if is_right_edge:
+                        # Fade toward higher frequencies (more blue)
+                        current_hue = hue + (edge_factor * EDGE_HUE_SHIFT)
+                    else:
+                        # No right edge blending
+                        current_hue = hue
                 else:
-                    # Center region (no edge blending)
-                    current_hue = hue
+                    # Left half of strip
+                    if is_left_edge:
+                        # Fade toward lower frequencies (more red)
+                        current_hue = hue - (edge_factor * EDGE_HUE_SHIFT)
+                    else:
+                        # No left edge blending
+                        current_hue = hue
                 
                 edge_fade = 1.0 - (edge_factor * EDGE_FADE_RATE)
             

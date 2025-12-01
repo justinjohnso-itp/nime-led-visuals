@@ -38,7 +38,7 @@ class AudioAnalyzer:
         self.bass_max = 0.1
         self.mid_max = 0.1
         self.high_max = 0.1
-        self.decay_rate = 0.70  # Very fast decay - kills noise floor quickly
+        self.decay_rate = 0.88  # Moderate decay - keeps dynamic range while killing noise
         self.prev_raw_volume = 0.0  # For transient detection
         
         # Attack/Decay envelope state (for brightness envelope)
