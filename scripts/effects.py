@@ -5,7 +5,7 @@ import numpy as np
 from config import (
     COLORS, NUM_LEDS_PER_STRIP, NUM_STRIPS,
     HUE_RANGE, EDGE_HUE_SHIFT, CORE_FRACTION_MIN, CORE_FRACTION_MAX,
-    MIN_BRIGHTNESS, EDGE_FADE_RATE
+    MIN_BRIGHTNESS, EDGE_FADE_RATE, TRANSIENT_BOOST
 )
 
 
@@ -47,6 +47,7 @@ class LEDEffects:
         centroid = features.get('centroid', 0.0)  # 0=bass, 1=treble
         bandwidth = features.get('bandwidth', 0.3)  # Spread of energetic region
         volume = features.get('volume', 0.0)
+        transient = features.get('transient', 0.0)  # Sudden volume increase
         
         # Total LED count across all strips
         total_leds = NUM_LEDS_PER_STRIP * NUM_STRIPS
@@ -55,8 +56,8 @@ class LEDEffects:
         # 0 = Red (bass), 1 = Blue (treble)
         hue = centroid * HUE_RANGE  # Degrees
         
-        # Brightness follows volume
-        brightness = max(MIN_BRIGHTNESS, volume)
+        # Brightness follows volume, with transient boost for musical events
+        brightness = max(MIN_BRIGHTNESS, volume + (transient * TRANSIENT_BOOST))
         
         # Build color distribution across all LEDs
         # Bandwidth controls how much of the strip shows the dominant frequency

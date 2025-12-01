@@ -3,7 +3,7 @@
 # LED Configuration
 NUM_LEDS_PER_STRIP = 144
 NUM_STRIPS = 3
-LED_BRIGHTNESS = 1.0  # 100% for testing (reduce to 0.3 once confirmed working)
+LED_BRIGHTNESS = 0.4
 
 # GPIO Pin (BCM numbering)
 GPIO_PIN = 18  # All daisy-chained strips on GPIO 18
@@ -41,12 +41,13 @@ COLORS = {
 
 # Effect Settings
 FPS_TARGET = 30
-SMOOTHING_FACTOR = 0.2  # 0.0-1.0, higher = snappier response
+SMOOTHING_FACTOR = 0.05  # 0.0-1.0, higher = snappier response (lowered for punchier response)
 
 # Dominant Frequency Visualization Parameters
 HUE_RANGE = 240              # Red (0°) to Blue (240°) covers bass to treble
 EDGE_HUE_SHIFT = 40          # ±40° hue shift at edges (adjacent frequency blending)
 CORE_FRACTION_MIN = 0.4      # Minimum core width (40%, for narrow tones)
 CORE_FRACTION_MAX = 0.8      # Maximum core width (80%, for broad spectrum)
-MIN_BRIGHTNESS = 0.3         # Keep colors visible even in quiet passages
+MIN_BRIGHTNESS = 0.05        # Lower floor for better contrast (musical events jump out more)
 EDGE_FADE_RATE = 0.4         # Brightness fades to 60% at edges
+TRANSIENT_BOOST = 0.3        # Extra brightness boost for sudden volume increases

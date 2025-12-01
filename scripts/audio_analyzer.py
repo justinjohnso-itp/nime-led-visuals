@@ -33,6 +33,7 @@ class AudioAnalyzer:
         self.mid_max = 0.1
         self.high_max = 0.1
         self.decay_rate = 0.95  # Faster decay for snappier response
+        self.prev_raw_volume = 0.0  # For transient detection
 
     def analyze(self, audio_chunk):
         """Analyze audio chunk and return features
@@ -100,6 +101,10 @@ class AudioAnalyzer:
         self.prev_centroid = centroid
         self.prev_bandwidth = bandwidth
 
+        # Detect transients (sudden volume increase = musical event)
+        transient = max(0, volume - self.prev_raw_volume)
+        self.prev_raw_volume = volume
+        
         return {
             "volume": volume,
             "bass": bass_norm,
@@ -107,6 +112,7 @@ class AudioAnalyzer:
             "high": high_norm,
             "centroid": centroid,  # Normalized to 0-1 (Hz to 0-1 range)
             "bandwidth": bandwidth,  # Normalized to 0-1
+            "transient": transient,  # 0-1, higher = sudden loud event
         }
 
     def _get_band_energy(self, fft, freqs, low_freq, high_freq):

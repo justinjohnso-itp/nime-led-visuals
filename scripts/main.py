@@ -130,7 +130,8 @@ def main(audio_source='live', filepath=None):
         'mid': 0.0,
         'high': 0.0,
         'centroid': 0.0,
-        'bandwidth': 0.0
+        'bandwidth': 0.0,
+        'transient': 0.0
     }
     stop_event = threading.Event()
 
