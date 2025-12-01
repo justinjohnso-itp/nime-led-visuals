@@ -126,17 +126,22 @@ def main(audio_source='live', filepath=None):
         elif platform.system() == 'Linux':
             try:
                 # Start ffmpeg | aplay pipeline in background (non-blocking)
-                ffmpeg_proc = subprocess.Popen(['ffmpeg', '-i', filepath, '-f', 's16le', '-ar', '44100', '-ac', '2', '-'], 
-                                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                ffmpeg_cmd = ['ffmpeg', '-i', filepath, '-f', 's16le', '-ar', '44100', '-ac', '2', '-']
+                print(f"   Running: {' '.join(ffmpeg_cmd)}")
+                ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, 
+                                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 aplay_cmd = ['aplay', '-f', 'S16_LE', '-r', '44100', '-c', '2']
                 if AUDIO_DEVICE:
                     aplay_cmd = ['aplay', '-D', AUDIO_DEVICE, '-f', 'S16_LE', '-r', '44100', '-c', '2']
+                print(f"   Running: {' '.join(aplay_cmd)}")
                 aplay_proc = subprocess.Popen(aplay_cmd, 
-                                             stdin=ffmpeg_proc.stdout, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                                             stdin=ffmpeg_proc.stdout, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
                 ffmpeg_proc.stdout.close()
-                # Don't wait for process - let it run in background
+                print(f"✓ Audio subprocess started (ffmpeg PID {ffmpeg_proc.pid}, aplay PID {aplay_proc.pid})")
             except Exception as e:
                 print(f"⚠️  Audio playback error: {e}")
+                import traceback
+                traceback.print_exc()
         time.sleep(0.5)  # Give playback time to start
         print("🔊 Playing audio...")
 
