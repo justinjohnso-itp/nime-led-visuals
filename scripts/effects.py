@@ -127,25 +127,27 @@ class LEDEffects:
             r, g, b = colorsys.hsv_to_rgb(current_hue / 360.0, 1.0, brightness * edge_fade)
             return (int(r * 255), int(g * 255), int(b * 255))
         
-        # Build colors for left strip (left edge fades secondary, rest = core)
+        # Physical layout: Strip 0 (left) | Strip 1 (center) | Strip 2 (right)
+        # Edge bleed should go OUTWARD from center, so:
+        # - Strip 0: RIGHT edge (pos=1.0) bleeds outward (away from center strip)
+        # - Strip 2: LEFT edge (pos=0.0) bleeds outward (away from center strip)
+        
+        # Build colors for left strip - right edge bleeds outward
         for i in range(NUM_LEDS_PER_STRIP):
-            pos = i / NUM_LEDS_PER_STRIP  # 0-1 across the strip
-            strips[0][i] = get_led_color(pos, is_left_edge=True)
+            pos = i / NUM_LEDS_PER_STRIP
+            strips[0][i] = get_led_color(pos, is_right_edge=True)
         
         # Build colors for center strip (core + red bass core expanding from center)
-        # Red core expands from center based on bass energy
-        red_core_fraction = core_fraction * bass_energy  # Red core size scales with bass
+        red_core_fraction = core_fraction * bass_energy
         red_core_fraction = np.clip(red_core_fraction, 0, 1.0)
         
         for i in range(NUM_LEDS_PER_STRIP):
             pos = i / NUM_LEDS_PER_STRIP
             base_color = get_led_color(pos)
             
-            # Red core from center: strong bass fills the strip with red
-            distance_from_center = abs(pos - 0.5) * 2  # 0 at center, 1 at edges
+            distance_from_center = abs(pos - 0.5) * 2
             
             if distance_from_center < red_core_fraction:
-                # Inside red core: blend towards pure red
                 core_blend = distance_from_center / max(red_core_fraction, 0.01)
                 r, g, b = base_color
                 r = int(255)
@@ -155,10 +157,10 @@ class LEDEffects:
             else:
                 strips[1][i] = base_color
         
-        # Build colors for right strip (right edge fades secondary, rest = core)
+        # Build colors for right strip - left edge bleeds outward
         for i in range(NUM_LEDS_PER_STRIP):
             pos = i / NUM_LEDS_PER_STRIP
-            strips[2][i] = get_led_color(pos, is_right_edge=True)
+            strips[2][i] = get_led_color(pos, is_left_edge=True)
 
     @staticmethod
     def pulse_effect(strip, volume, color=(255, 255, 255)):

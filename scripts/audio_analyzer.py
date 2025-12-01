@@ -62,8 +62,22 @@ class AudioAnalyzer:
         # Volume (RMS)
         volume = float(np.sqrt(np.mean(audio ** 2))) if audio.size > 0 else 0.0
 
-        # Noise gate (volume only, don't zero the audio)
-        gated_volume = 0.0 if volume < NOISE_GATE_THRESHOLD else volume
+        # Noise gate - if below threshold, return silence
+        if volume < NOISE_GATE_THRESHOLD:
+            return {
+                "volume": 0.0,
+                "bass": 0.0,
+                "mid": 0.0,
+                "high": 0.0,
+                "sub_bass": 0.0,
+                "low_mid": 0.0,
+                "mid_high": 0.0,
+                "treble": 0.0,
+                "centroid": 0.0,
+                "bandwidth": 0.0,
+                "transient": 0.0,
+                "envelope": self.envelope_value * 0.9,  # Let envelope decay
+            }
 
         # Ensure frame matches FFT size
         if audio.size < self.n_fft:
@@ -150,7 +164,7 @@ class AudioAnalyzer:
         self.envelope_value = float(np.clip(self.envelope_value, 0.0, 1.0))
 
         return {
-            "volume": gated_volume,
+            "volume": volume,
             "bass": band_norms.get("bass", 0.0),
             "mid": mid,
             "high": high,
