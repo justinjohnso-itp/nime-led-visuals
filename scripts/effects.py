@@ -35,35 +35,44 @@ class LEDEffects:
 
     @staticmethod
     def frequency_spectrum(strips, features):
-        """Show dominant frequencies across all strips with color gradient
+        """Show bass/mid/treble across strips with color gradient
         
-        Maps centroid frequency to a color (red=low, blue=high) and spreads based on bandwidth.
-        Most strips show the dominant frequency, edges show secondary frequencies.
+        Maps actual frequency band energies to colors:
+        - Bass (red), Mid (green), Treble (blue)
+        - Weighted by perceptual loudness (louder bands dominate color)
         
         Args:
             strips: list of 3 PixelSubset objects [left, center, right]
-            features: dict with centroid, bandwidth, volume (all 0.0-1.0)
+            features: dict with bass, mid, high, volume (all 0.0-1.0)
         """
-        centroid = features.get('centroid', 0.0)  # 0=bass, 1=treble
-        bandwidth = features.get('bandwidth', 0.3)  # Spread of energetic region
+        bass = features.get('bass', 0.0)       # 20-200 Hz
+        mid = features.get('mid', 0.0)         # 200-2k Hz
+        high = features.get('high', 0.0)       # 2k-20k Hz
         volume = features.get('volume', 0.0)
         transient = features.get('transient', 0.0)  # Sudden volume increase
         
         # Total LED count across all strips
         total_leds = NUM_LEDS_PER_STRIP * NUM_STRIPS
         
-        # Map centroid (0-1) to frequency hue
-        # 0 = Red (bass), 1 = Blue (treble)
-        hue = centroid * HUE_RANGE  # Degrees
+        # Determine hue based on which band is strongest (most energy)
+        # This creates a natural color shift: bass=red, mid=green, treble=blue
+        total_energy = bass + mid + high + 0.001  # Avoid division by zero
+        bass_norm = bass / total_energy
+        mid_norm = mid / total_energy
+        high_norm = high / total_energy
+        
+        # Map band dominance to hue (0-360°)
+        # Red (0°) for bass, Green (120°) for mid, Blue (240°) for treble
+        hue = (bass_norm * 0 + mid_norm * 120 + high_norm * 240) % 360
         
         # Brightness follows volume, with transient boost for musical events
         brightness = max(MIN_BRIGHTNESS, volume + (transient * TRANSIENT_BOOST))
         
         # Build color distribution across all LEDs
-        # Bandwidth controls how much of the strip shows the dominant frequency
-        # Low bandwidth (0.2) = narrow core, wider edge blending
-        # High bandwidth (0.9) = wider core, narrower edge blending
-        core_fraction = CORE_FRACTION_MIN + ((CORE_FRACTION_MAX - CORE_FRACTION_MIN) * bandwidth)
+        # Use the strongest band's energy to control stripe width
+        # Low energy (quiet) = narrow core, High energy (loud) = wider core
+        strongest_band = max(bass_norm, mid_norm, high_norm)
+        core_fraction = CORE_FRACTION_MIN + ((CORE_FRACTION_MAX - CORE_FRACTION_MIN) * strongest_band)
         
         led_colors = []
         for led_idx in range(total_leds):
