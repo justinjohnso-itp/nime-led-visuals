@@ -1,6 +1,7 @@
 """Audio feature extraction for real-time visualization"""
 
 import numpy as np
+from scipy.signal import stft
 from config import (
     SAMPLE_RATE,
     CHUNK_SIZE,
@@ -49,16 +50,16 @@ class AudioAnalyzer:
         self.envelope_value = 0.0  # Current brightness envelope (0-1)
         self.target_envelope = 0.0  # Target brightness (what we're trying to reach)
         
-        # STFT overlap buffer for 50% overlapping windows (reduces spectral leakage)
-        # Using 50% overlap = half of chunk size
-        self.overlap_buffer = np.zeros(CHUNK_SIZE // 2)
-        self.window = np.hamming(CHUNK_SIZE)  # Hamming for STFT (slightly better for overlap-add)
+        # STFT buffer for 50% overlapping analysis (scipy.signal.stft handles overlap internally)
+        # We accumulate chunks until we have enough to analyze
+        self.stft_buffer = np.array([], dtype=np.float32)
+        self.min_buffer_size = CHUNK_SIZE  # Analyze when buffer has at least 1 full chunk
 
     def analyze(self, audio_chunk):
         """Analyze audio chunk and return features
         
-        Uses 50% overlapping STFT (Short-Time Fourier Transform) for better spectral leakage reduction.
-        This analyzes each frequency component at multiple phase positions, averaging out leakage artifacts.
+        Uses scipy.signal.stft with 50% overlapping windows for spectral leakage reduction.
+        Each frequency is analyzed at multiple phases, averaging out leakage artifacts.
         
         Args:
             audio_chunk: numpy array of audio samples (int16 or float32)
@@ -78,25 +79,42 @@ class AudioAnalyzer:
         # Calculate RMS volume on current chunk (before processing)
         volume = np.sqrt(np.mean(audio**2))
         
-        # Build STFT frame: 50% overlap with previous chunk
-        # This reduces spectral leakage by having each frequency analyzed at multiple phase positions
-        stft_frame = np.concatenate([self.overlap_buffer, audio])
+        # Accumulate in buffer for STFT analysis
+        self.stft_buffer = np.concatenate([self.stft_buffer, audio])
         
-        # Apply Hamming window for STFT (provides good overlap-add properties)
-        stft_frame = stft_frame * self.window
-        
-        # Store second half for next chunk's overlap
-        self.overlap_buffer = audio[CHUNK_SIZE // 2:]
-        
-        # Apply noise gate - kill signals below threshold
+        # Apply noise gate - kill entire buffer if volume is too quiet
         if volume < NOISE_GATE_THRESHOLD:
-            stft_frame = np.zeros_like(stft_frame)
+            volume = 0.0
+            self.stft_buffer = np.zeros_like(self.stft_buffer)
 
-        # FFT with zero-padding for improved frequency resolution
-        # Pad to 2x chunk size (finer bin spacing, no latency cost)
-        padded_len = len(stft_frame) * 2
-        fft = np.abs(np.fft.rfft(stft_frame, n=padded_len))
-        freqs = np.fft.rfftfreq(padded_len, 1 / self.sample_rate)
+        # Only analyze when we have enough buffered samples
+        # Use scipy.signal.stft for proper spectral leakage reduction via overlapping windows
+        if len(self.stft_buffer) >= self.min_buffer_size:
+            # stft: 50% overlap, Hamming window, nperseg=CHUNK_SIZE
+            # Returns (freqs, times, Zxx) where Zxx is complex STFT matrix
+            freqs_stft, _, Zxx = stft(
+                self.stft_buffer,
+                fs=self.sample_rate,
+                window='hamming',
+                nperseg=CHUNK_SIZE,
+                noverlap=CHUNK_SIZE // 2,
+                nfft=CHUNK_SIZE * 2,  # Zero-padding for finer frequency resolution
+                return_onesided=True,
+                boundary=None,  # Don't pad input (we control buffering)
+            )
+            
+            # Use the LATEST frame (most recent analysis, rightmost column of spectrogram)
+            fft = np.abs(Zxx[:, -1])  # Last frame (most recent chunk)
+            freqs = freqs_stft
+            
+            # Keep only what we haven't analyzed yet (for next iteration)
+            # Drop first CHUNK_SIZE samples since they're now analyzed
+            self.stft_buffer = self.stft_buffer[CHUNK_SIZE:]
+        else:
+            # Not enough data yet - return placeholder values
+            # (first 1-2 chunks will be silent/zeros)
+            fft = np.zeros(CHUNK_SIZE + 1)  # rfft output size
+            freqs = np.fft.rfftfreq(CHUNK_SIZE * 2, 1 / self.sample_rate)
 
         # Extract all frequency bands
         band_energies = {}
