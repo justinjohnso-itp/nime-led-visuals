@@ -123,7 +123,7 @@ class LEDEffects:
         feather_size = max(10, edge_size // 2)  # Gradient zone (at least 10 LEDs)
         
         # Bass core for center strip with subtle feathering (sharper edges)
-        bass_core_size = int(NUM_LEDS_PER_STRIP * 0.5 * (bass_energy / (bass_energy + 0.5)))
+        bass_core_size = int(NUM_LEDS_PER_STRIP * 0.7 * (bass_energy / (bass_energy + 0.3)))
         bass_feather_size = max(5, bass_core_size // 4)  # Smaller gradient zone for sharper edges
         bass_brightness = LEDEffects._prev_brightness
         bass_intensity = min(1.0, bass_energy * 2)
