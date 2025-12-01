@@ -40,14 +40,15 @@ COLORS = {
 }
 
 # Effect Settings
-FPS_TARGET = 30
-SMOOTHING_FACTOR = 0.05  # 0.0-1.0, higher = snappier response (lowered for punchier response)
+FPS_TARGET = 60              # Increased from 30 for smoother animation
+SMOOTHING_FACTOR = 0.02      # 0.0-1.0, lowered to 0.02 for very fast responsiveness
+BRIGHTNESS_EXPONENT = 1.5    # Log scaling for brightness (makes quiet moments darker, peaks brighter)
 
 # Dominant Frequency Visualization Parameters
 HUE_RANGE = 240              # Red (0°) to Blue (240°) covers bass to treble
 EDGE_HUE_SHIFT = 40          # ±40° hue shift at edges (adjacent frequency blending)
 CORE_FRACTION_MIN = 0.4      # Minimum core width (40%, for narrow tones)
 CORE_FRACTION_MAX = 0.8      # Maximum core width (80%, for broad spectrum)
-MIN_BRIGHTNESS = 0.05        # Lower floor for better contrast (musical events jump out more)
+MIN_BRIGHTNESS = 0.01        # Even lower floor (nearly off) for maximum contrast
 EDGE_FADE_RATE = 0.4         # Brightness fades to 60% at edges
-TRANSIENT_BOOST = 0.3        # Extra brightness boost for sudden volume increases
+TRANSIENT_BOOST = 0.5        # Extra brightness boost for sudden volume increases (increased)

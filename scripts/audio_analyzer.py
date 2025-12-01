@@ -10,6 +10,7 @@ from config import (
     HIGH_LOW,
     HIGH_HIGH,
     SMOOTHING_FACTOR,
+    BRIGHTNESS_EXPONENT,
     FREQ_MIN,
     FREQ_MAX,
 )

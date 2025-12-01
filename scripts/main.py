@@ -88,8 +88,8 @@ def led_thread_func(pixels, strips, shared_features, stop_event):
             # Show all changes at once (daisy-chained)
             pixels.show()
             
-            # LED updates at 20 FPS (50ms) for snappier response
-            time.sleep(0.05)
+            # LED updates at 60 FPS (16.67ms) - take full advantage of RPi processing
+            time.sleep(0.01667)
     except Exception as e:
         print(f"\n❌ LED thread error: {e}")
     finally:
