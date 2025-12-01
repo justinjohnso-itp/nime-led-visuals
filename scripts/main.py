@@ -88,8 +88,8 @@ def led_thread_func(pixels, strips, shared_features, stop_event):
             # Show all changes at once (daisy-chained)
             pixels.show()
             
-            # Fixed 20 FPS LED updates (50ms)
-            time.sleep(0.05)
+            # LED updates at 10 FPS (100ms) to reduce blocking of audio
+            time.sleep(0.1)
     except Exception as e:
         print(f"\n❌ LED thread error: {e}")
     finally:
@@ -125,14 +125,16 @@ def main(audio_source='live', filepath=None):
             subprocess.Popen(['afplay', filepath])
         elif platform.system() == 'Linux':
             try:
+                # Start ffmpeg | aplay pipeline in background (non-blocking)
                 ffmpeg_proc = subprocess.Popen(['ffmpeg', '-i', filepath, '-f', 's16le', '-ar', '44100', '-ac', '2', '-'], 
-                                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                 aplay_cmd = ['aplay', '-f', 'S16_LE', '-r', '44100', '-c', '2']
                 if AUDIO_DEVICE:
                     aplay_cmd = ['aplay', '-D', AUDIO_DEVICE, '-f', 'S16_LE', '-r', '44100', '-c', '2']
                 aplay_proc = subprocess.Popen(aplay_cmd, 
-                                             stdin=ffmpeg_proc.stdout, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+                                             stdin=ffmpeg_proc.stdout, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
                 ffmpeg_proc.stdout.close()
+                # Don't wait for process - let it run in background
             except Exception as e:
                 print(f"⚠️  Audio playback error: {e}")
         time.sleep(0.5)  # Give playback time to start
