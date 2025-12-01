@@ -19,7 +19,7 @@ run-file = "python scripts/main.py --file test.mp3"
 run-live = "bash run_live.sh"
 
 [target.linux-aarch64.pypi-dependencies]
-RPi.GPIO = ">=0.7.0"
+"RPi.GPIO" = ">=0.7.0"
 adafruit-blinka = ">=8.0.0"
 rpi-ws281x = ">=5.0.0"
 adafruit-circuitpython-neopixel = ">=6.3.18"
