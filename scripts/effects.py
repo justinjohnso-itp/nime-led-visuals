@@ -60,9 +60,9 @@ class LEDEffects:
             spectrum = np.zeros(32)
         
         # Average energy in frequency regions (for edges/brightness)
-        bass_energy = float(np.mean(spectrum[0:8]))      # 20-200 Hz (red)
-        mid_energy = float(np.mean(spectrum[8:16]))      # 200-1.5k Hz (amber)
-        treble_energy = float(np.mean(spectrum[16:32]))  # 1.5k-20k Hz (blue edges)
+        bass_energy = float(np.mean(spectrum[0:10]))     # 20-173 Hz (red)
+        mid_energy = float(np.mean(spectrum[10:22]))     # 173-2.3k Hz (amber)
+        treble_energy = float(np.mean(spectrum[22:32]))  # 2.3k-20k Hz (blue edges)
         
         # Fallback blended hue
         core_total = bass_energy + mid_energy + 0.001
@@ -71,14 +71,14 @@ class LEDEffects:
         blended_hue = (bass_weight * 0.0) + (mid_weight * 30.0)
         
         # Use DOMINANT BAND for color when spectrum is tonal enough
-        TONALNESS_THRESHOLD = 0.15  # Lower = more responsive to peaks
+        TONALNESS_THRESHOLD = 0.15
         if dominant_band >= 0 and tonalness > TONALNESS_THRESHOLD:
-            if dominant_band < 8:
-                target_hue = 0.0      # Bass → Red
-            elif dominant_band < 16:
-                target_hue = 30.0     # Mid → Amber
+            if dominant_band < 10:
+                target_hue = 0.0      # Bass (20-173 Hz) → Red
+            elif dominant_band < 22:
+                target_hue = 30.0     # Mid (173-2.3k Hz) → Amber
             else:
-                target_hue = 240.0    # Treble → Blue
+                target_hue = 240.0    # Treble (2.3k+ Hz) → Blue
         else:
             target_hue = blended_hue
         
@@ -91,9 +91,9 @@ class LEDEffects:
         # Edge intensity from treble (now 0-1 range since we use mean)
         target_edge = treble_energy  # Direct mapping, already 0-1
         
-        # Smoothing - edges are faster for more movement
-        attack = 0.8
-        decay = 0.3
+        # Smoothing - fast edges for transient response
+        attack = 0.9
+        decay = 0.5
         
         # Hue smoothing
         hue_diff = target_hue - LEDEffects._prev_hue
@@ -122,11 +122,11 @@ class LEDEffects:
         edge_size = int(NUM_LEDS_PER_STRIP * 0.6 * LEDEffects._prev_edge)
         feather_size = max(10, edge_size // 2)  # Gradient zone (at least 10 LEDs)
         
-        # Bass core for center strip with feathering
+        # Bass core for center strip with subtle feathering (sharper edges)
         bass_core_size = int(NUM_LEDS_PER_STRIP * 0.5 * (bass_energy / (bass_energy + 0.5)))
-        bass_feather_size = max(10, bass_core_size // 2)  # Gradient zone
+        bass_feather_size = max(5, bass_core_size // 4)  # Smaller gradient zone for sharper edges
         bass_brightness = LEDEffects._prev_brightness
-        bass_intensity = min(1.0, bass_energy * 2)  # How strong the red core is
+        bass_intensity = min(1.0, bass_energy * 2)
         
         center = NUM_LEDS_PER_STRIP // 2
         
