@@ -62,7 +62,7 @@ ATTACK_TIME = 0.02           # How fast brightness jumps to a new peak (20ms = 1
 DECAY_TIME = 0.15            # How fast brightness falls back down (150ms = smooth falloff)
 
 # Noise Gate (silence if below this threshold)
-NOISE_GATE_THRESHOLD = 0.05   # Mute signals quieter than 5% RMS to kill input noise
+NOISE_GATE_THRESHOLD = 0.10   # Mute signals quieter than 10% RMS to kill spectral leakage
 
 # Dominant Frequency Visualization Parameters
 HUE_RANGE = 240              # Red (0°) to Blue (240°) covers bass to treble

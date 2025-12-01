@@ -37,7 +37,7 @@ class AudioAnalyzer:
         self.prev_bandwidth = 0.0
         # Per-band peak tracking (independent normalization for each band)
         self.band_max = {name: 0.1 for _, _, name in FREQ_BANDS}
-        self.decay_rate = 0.75  # Fast decay - kills noise floor quickly while keeping peaks responsive
+        self.decay_rate = 0.60  # Very fast decay - kills spectral leakage sidelobes quickly
         self.prev_raw_volume = 0.0  # For transient detection
         
         # Legacy band maxes for backward compatibility
