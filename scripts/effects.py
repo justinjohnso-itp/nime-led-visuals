@@ -33,9 +33,16 @@ class LEDEffects:
             else:
                 strip[i] = (0, 0, 0)
 
+    # Class-level state for smoothing
+    _prev_hue = 0.0
+    _prev_brightness = 0.0
+    
     @staticmethod
     def frequency_spectrum(strips, features):
-        """Fast frequency spectrum visualization
+        """Fast frequency spectrum visualization - stage-friendly colors
+        
+        Color palette: Red (bass) → Amber (low-mid) → Blue (treble)
+        No greens/yellows - they look bad on stage
         
         Args:
             strips: list of 3 PixelSubset objects [left, center, right]
@@ -44,23 +51,53 @@ class LEDEffects:
         # Extract features
         sub_bass_val = features.get('sub_bass', 0.0)
         bass_val = features.get('bass', 0.0)
+        low_mid_val = features.get('low_mid', 0.0)
         treble_val = features.get('treble', 0.0)
         envelope = features.get('envelope', 0.0)
-        volume = features.get('volume', 0.0)
         
-        # Bass-treble color blend (red=0° to blue=240°)
+        # Weighted color selection - skip green/yellow entirely
+        # Red (0°) for bass, Amber (30°) for low-mids, Blue (240°) for treble
         bass_energy = sub_bass_val + bass_val
-        total = bass_energy + treble_val + 0.001
-        hue = (treble_val / total) * 240.0
+        
+        # Calculate blend weights
+        total = bass_energy + low_mid_val + treble_val + 0.001
+        bass_weight = bass_energy / total
+        mid_weight = low_mid_val / total
+        treble_weight = treble_val / total
+        
+        # Map to stage-friendly hues: Red(0°) → Amber(30°) → Blue(240°)
+        # Bass pulls toward red, low-mid pulls toward amber, treble pulls toward blue
+        target_hue = (bass_weight * 0.0) + (mid_weight * 30.0) + (treble_weight * 240.0)
         
         # Brightness from envelope
-        brightness = max(MIN_BRIGHTNESS, envelope ** BRIGHTNESS_EXPONENT)
+        target_brightness = max(MIN_BRIGHTNESS, envelope ** BRIGHTNESS_EXPONENT)
         
-        # Convert HSV to RGB once (not per-LED!)
-        r, g, b = colorsys.hsv_to_rgb(hue / 360.0, 1.0, brightness)
+        # Smoothing (attack/decay)
+        attack = 0.7   # Fast attack
+        decay = 0.15   # Slower decay
+        
+        # Hue smoothing
+        hue_diff = target_hue - LEDEffects._prev_hue
+        if abs(hue_diff) > 180:  # Handle wrap-around
+            if hue_diff > 0:
+                hue_diff -= 360
+            else:
+                hue_diff += 360
+        hue_rate = attack if abs(hue_diff) > 0 else decay
+        LEDEffects._prev_hue += hue_diff * hue_rate
+        LEDEffects._prev_hue = LEDEffects._prev_hue % 360
+        
+        # Brightness smoothing
+        if target_brightness > LEDEffects._prev_brightness:
+            LEDEffects._prev_brightness += (target_brightness - LEDEffects._prev_brightness) * attack
+        else:
+            LEDEffects._prev_brightness += (target_brightness - LEDEffects._prev_brightness) * decay
+        
+        # Convert HSV to RGB
+        r, g, b = colorsys.hsv_to_rgb(LEDEffects._prev_hue / 360.0, 1.0, LEDEffects._prev_brightness)
         base_color = (int(r * 255), int(g * 255), int(b * 255))
         
-        # Fill all strips with the same color (fast!)
+        # Fill all strips
         for strip in strips:
             strip.fill(base_color)
 
