@@ -166,27 +166,33 @@ def main(audio_source='live', filepath=None):
     # Main thread: print features and handle shutdown
     try:
         while True:
-            # Create ASCII spectrum visualizer
+            # Create ASCII spectrum visualizer with 5 bands
+            sub_bass = shared_features['sub_bass']
             bass = shared_features['bass']
-            mid = shared_features['mid']
-            high = shared_features['high']
+            low_mid = shared_features['low_mid']
+            mid_high = shared_features['mid_high']
+            treble = shared_features['treble']
             transient = shared_features['transient']
             volume = shared_features['volume']
             envelope = shared_features['envelope']
             
-            # Create bars (10 chars max per band)
-            bar_width = 10
-            bass_bar = '█' * int(bass * bar_width)
-            mid_bar = '█' * int(mid * bar_width)
-            high_bar = '█' * int(high * bar_width)
+            # Create bars (8 chars max per band for compact display)
+            bar_width = 8
+            sub_bass_bar = '🔴' * int(sub_bass * bar_width)
+            bass_bar = '🔴' * int(bass * bar_width)
+            low_mid_bar = '🟡' * int(low_mid * bar_width)
+            mid_high_bar = '🟢' * int(mid_high * bar_width)
+            treble_bar = '🔵' * int(treble * bar_width)
             
-            # Transient indicator (flash when detected - very sensitive now)
+            # Transient indicator
             transient_char = '⚡' if transient > 0.05 else ' '
             
-            # Create the display
-            output = f"BASS  [{bass_bar:<{bar_width}}] {bass:5.2f}  "
-            output += f"MID   [{mid_bar:<{bar_width}}] {mid:5.2f}  "
-            output += f"TREBLE [{high_bar:<{bar_width}}] {high:5.2f}  "
+            # Create the display with color coding
+            output = f"SUB-BASS [{sub_bass_bar:<{bar_width}}] "
+            output += f"BASS [{bass_bar:<{bar_width}}] "
+            output += f"LOW-MID [{low_mid_bar:<{bar_width}}] "
+            output += f"MID-HI [{mid_high_bar:<{bar_width}}] "
+            output += f"TREBLE [{treble_bar:<{bar_width}}] "
             output += f"VOL:{volume:.2f} ENV:{envelope:.2f} {transient_char}"
             
             print(output, end='\r')

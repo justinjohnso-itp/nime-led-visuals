@@ -123,8 +123,8 @@ class LEDEffects:
                 else:
                     # Left half of strip
                     if is_left_edge:
-                        # Fade toward lower frequencies (more red) - opposite of treble
-                        current_hue = hue - (edge_factor * treble_edge_boost)
+                        # Also fade toward treble/blue on left edge for symmetry
+                        current_hue = hue + (edge_factor * treble_edge_boost)
                     else:
                         # No left edge blending
                         current_hue = hue
