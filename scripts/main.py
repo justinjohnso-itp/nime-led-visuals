@@ -176,24 +176,32 @@ def main(audio_source='live', filepath=None):
             volume = shared_features['volume']
             envelope = shared_features['envelope']
             
-            # Create bars (4 chars max per band for compact display)
-            bar_width = 4
-            sub_bass_bar = '🔴' * int(sub_bass * bar_width)
-            bass_bar = '🔴' * int(bass * bar_width)
-            low_mid_bar = '🟡' * int(low_mid * bar_width)
-            mid_high_bar = '🟢' * int(mid_high * bar_width)
-            treble_bar = '🔵' * int(treble * bar_width)
+            # Create bars (6 chars per band, fixed width, colored)
+            bar_width = 6
+            RED = '\033[91m'
+            ORANGE = '\033[33m'
+            GREEN = '\033[92m'
+            BLUE = '\033[94m'
+            RESET = '\033[0m'
+            
+            # Colored bars with monospace █
+            sub_bass_bar = f"{RED}{'█' * int(sub_bass * bar_width)}{RESET}" + ' ' * (bar_width - int(sub_bass * bar_width))
+            bass_bar = f"{RED}{'█' * int(bass * bar_width)}{RESET}" + ' ' * (bar_width - int(bass * bar_width))
+            low_mid_bar = f"{ORANGE}{'█' * int(low_mid * bar_width)}{RESET}" + ' ' * (bar_width - int(low_mid * bar_width))
+            mid_high_bar = f"{GREEN}{'█' * int(mid_high * bar_width)}{RESET}" + ' ' * (bar_width - int(mid_high * bar_width))
+            treble_bar = f"{BLUE}{'█' * int(treble * bar_width)}{RESET}" + ' ' * (bar_width - int(treble * bar_width))
             
             # Transient indicator
             transient_char = '⚡' if transient > 0.05 else ' '
             
-            # Create the display with color coding
-            output = f"SUB-BASS [{sub_bass_bar:<{bar_width}}] "
-            output += f"BASS [{bass_bar:<{bar_width}}] "
-            output += f"LOW-MID [{low_mid_bar:<{bar_width}}] "
-            output += f"MID-HI [{mid_high_bar:<{bar_width}}] "
-            output += f"TREBLE [{treble_bar:<{bar_width}}] "
+            # Create the display with fixed widths (all on one line)
+            output = f"SUB [{sub_bass_bar}] "
+            output += f"BASS [{bass_bar}] "
+            output += f"L-MID [{low_mid_bar}] "
+            output += f"M-HI [{mid_high_bar}] "
+            output += f"TRE [{treble_bar}] "
             output += f"VOL:{volume:.2f} ENV:{envelope:.2f} {transient_char}"
+            output += " " * 20  # Padding to clear previous output
             
             print(output, end='\r')
             time.sleep(0.1)  # Update display every 100ms
