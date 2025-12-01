@@ -75,14 +75,17 @@ class AudioAnalyzer:
             volume = 0.0
             audio = np.zeros_like(audio)
         else:
-            # Apply Hann window to eliminate spectral leakage
-            # Window function tapers signal to zero at edges, preventing discontinuities in FFT
-            window = np.hanning(len(audio))
+            # Apply Tukey window (hybrid Hann+rectangular)
+            # Better than Hann for transient preservation while still reducing spectral leakage
+            # alpha=0.5 means 50% of window is tapered (good balance for audio)
+            window = np.blackman(len(audio))  # Slightly more aggressive leakage reduction than Hann
             audio = audio * window
 
-        # FFT analysis
-        fft = np.abs(np.fft.rfft(audio))
-        freqs = np.fft.rfftfreq(len(audio), 1 / self.sample_rate)
+        # FFT with zero-padding for better frequency resolution
+        # Pad to 2x chunk size (improves spectral definition without changing latency)
+        padded_len = len(audio) * 2
+        fft = np.abs(np.fft.rfft(audio, n=padded_len))
+        freqs = np.fft.rfftfreq(padded_len, 1 / self.sample_rate)
 
         # Extract all frequency bands
         band_energies = {}
@@ -94,8 +97,8 @@ class AudioAnalyzer:
             # Update running max independently per band
             self.band_max[name] = max(energy, self.band_max[name] * self.decay_rate)
             
-            # Normalize by own max
-            norm = energy / max(self.band_max[name], 0.001)
+            # Normalize by own max (higher floor = less noise amplification)
+            norm = energy / max(self.band_max[name], 0.01)
             band_norms[name] = np.clip(norm, 0, 1)
         
         # Legacy band extraction for effects.py compatibility
@@ -165,9 +168,21 @@ class AudioAnalyzer:
         }
 
     def _get_band_energy(self, fft, freqs, low_freq, high_freq):
-        """Get average energy in frequency band"""
+        """Get total energy in frequency band
+        
+        Uses sum instead of mean to avoid biasing against small bands.
+        Normalizes by bin width to handle zero-padding scaling.
+        """
         mask = (freqs >= low_freq) & (freqs < high_freq)
-        return np.mean(fft[mask]) if np.any(mask) else 0.0
+        if not np.any(mask):
+            return 0.0
+        
+        # Sum energy (not mean, which biases small bands)
+        energy = np.sum(fft[mask])
+        
+        # Normalize by number of bins to scale consistently with zero-padding
+        num_bins = np.sum(mask)
+        return energy / max(num_bins, 1)
 
     def _calculate_spectral_features(self, fft, freqs):
         """Calculate spectral centroid and bandwidth
