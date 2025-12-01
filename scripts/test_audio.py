@@ -21,7 +21,7 @@ def main(filepath):
         if platform.system() == 'Darwin':
             subprocess.Popen(['afplay', filepath])
         elif platform.system() == 'Linux':
-            subprocess.Popen(['mpg123', filepath], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            subprocess.Popen(['mpg123', filepath])
         time.sleep(0.5)  # Give playback time to start
         print("Playing audio...\n")
     except Exception as e:
