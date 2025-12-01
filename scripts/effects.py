@@ -142,6 +142,10 @@ class LEDEffects:
             strips[0][i] = get_led_color(pos, is_left_edge=True)
         
         # Build colors for center strip (no edges, pure core + aggressive bass radiance from center)
+        # Pre-calculate bass radiance strength (once, not per LED)
+        bass_radiance_intensity = (bass_energy ** 2) * brightness  # Simpler: bass^2 * brightness
+        bass_radiance_intensity = np.clip(bass_radiance_intensity, 0, 1)
+        
         for i in range(NUM_LEDS_PER_STRIP):
             pos = i / NUM_LEDS_PER_STRIP
             base_color = get_led_color(pos)
@@ -149,16 +153,13 @@ class LEDEffects:
             # Bass radiance from center: distance from 0.5 determines how much bass bleeds
             distance_from_center = abs(pos - 0.5) * 2  # 0 at center, 1 at edges
             bass_radiance = max(0, 1.0 - (distance_from_center / BASS_CENTER_FRACTION))
-            
-            # Aggressive bass scaling: strong bass hits take over the strip
-            bass_radiance = (bass_radiance ** 0.5) * (bass_energy ** BASS_RADIANCE_STRENGTH) * brightness
-            bass_radiance = np.clip(bass_radiance, 0, 1)
+            bass_radiance = bass_radiance * bass_radiance_intensity  # Apply pre-calculated intensity
             
             # When bass is strong, fade out other colors and go full red
             r, g, b = base_color
-            r = int(r * (1.0 - bass_radiance * 0.5) + bass_radiance * 255)  # Boost red
-            g = int(g * (1.0 - bass_radiance * 0.7))  # Reduce green
-            b = int(b * (1.0 - bass_radiance * 0.7))  # Reduce blue
+            r = int(r + bass_radiance * (255 - r))  # Blend towards red
+            g = int(g * (1.0 - bass_radiance * 0.8))  # Reduce green
+            b = int(b * (1.0 - bass_radiance * 0.8))  # Reduce blue
             strips[1][i] = (int(np.clip(r, 0, 255)), int(np.clip(g, 0, 255)), int(np.clip(b, 0, 255)))
         
         # Build colors for right strip (right edge fades secondary, rest = core)
