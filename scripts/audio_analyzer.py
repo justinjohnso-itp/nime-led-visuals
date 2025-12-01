@@ -1,7 +1,7 @@
-"""Audio feature extraction - simple and working version"""
+"""Audio feature extraction using librosa mel-spectrogram (production version)"""
 
 import numpy as np
-from scipy.signal import stft
+import librosa
 from config import (
     SAMPLE_RATE,
     CHUNK_SIZE,
@@ -18,13 +18,13 @@ from config import (
 
 
 class AudioAnalyzer:
-    """Extract frequency and volume features from audio chunks"""
+    """Extract frequency and volume features using mel-scale spectrogram"""
 
     def __init__(self, sample_rate=SAMPLE_RATE, smoothing=SMOOTHING_FACTOR):
         self.sample_rate = sample_rate
         self.smoothing = smoothing
         
-        # Per-band peak tracking (independent normalization for each band)
+        # Per-band peak tracking
         self.band_max = {name: 0.1 for _, _, name in FREQ_BANDS}
         self.decay_rate = 0.60
         self.prev_raw_volume = 0.0
@@ -37,9 +37,16 @@ class AudioAnalyzer:
         # ADSR envelope
         self.envelope_value = 0.0
         self.target_envelope = 0.0
+        
+        # Streaming buffer: accumulate chunks until we have enough for analysis
+        self.buffer = np.array([], dtype=np.float32)
+        
+        # STFT/Melspectrogram parameters (must match librosa calls)
+        self.n_fft = 2048
+        self.hop_length = 512
 
     def analyze(self, audio_chunk):
-        """Analyze audio chunk and return features"""
+        """Analyze audio using mel-spectrogram"""
         # Convert to float
         if audio_chunk.dtype == np.int16:
             audio = audio_chunk.astype(np.float32) / 32768.0
@@ -52,33 +59,71 @@ class AudioAnalyzer:
         # Calculate volume
         volume = np.sqrt(np.mean(audio**2))
         
-        # Apply noise gate
+        # Accumulate in buffer
+        self.buffer = np.concatenate([self.buffer, audio])
+        
+        # Apply noise gate to entire buffer if current chunk is silent
         if volume < NOISE_GATE_THRESHOLD:
             volume = 0.0
-            audio = np.zeros_like(audio)
-
-        # Direct FFT (no scipy.stft complexity)
-        # Apply Hamming window to reduce spectral leakage
-        window = np.hamming(len(audio))
-        audio_windowed = audio * window
-
-        # FFT with 2x zero-padding for better frequency resolution
-        fft = np.abs(np.fft.rfft(audio_windowed, n=len(audio) * 2))
-        freqs = np.fft.rfftfreq(len(audio) * 2, 1 / self.sample_rate)
-
-        # Extract frequency bands
+            self.buffer = np.zeros_like(self.buffer)
+        
+        # Only analyze when buffer has enough samples for melspectrogram
+        # n_fft=2048 needs at least 2048 samples to produce any output
+        if len(self.buffer) < 2048:
+            return self._empty_features()
+        
+        # Compute mel-spectrogram on accumulated buffer
+        try:
+            S = librosa.feature.melspectrogram(
+                y=self.buffer,
+                sr=self.sample_rate,
+                n_mels=128,
+                n_fft=self.n_fft,
+                hop_length=self.hop_length,
+                fmin=FREQ_MIN,
+                fmax=FREQ_MAX,
+                power=2.0,
+                window='hann',
+                center=False,  # Don't center-pad (we manage buffering)
+            )
+            # S shape: (128, num_frames)
+        except Exception as e:
+            print(f"Melspectrogram error: {e}, buffer_len={len(self.buffer)}")
+            return self._empty_features()
+        
+        # Extract latest frame (most recent audio)
+        latest_frame = S[:, -1]  # (128,)
+        
+        # Drop analyzed samples from buffer (prevent re-analysis)
+        # With center=False: frame t begins at sample t*hop_length and spans n_fft samples
+        # After N frames, we've analyzed up to sample N*hop_length + n_fft - 1
+        # Drop num_frames * hop_length to keep overlap and prevent re-analysis
+        num_frames = S.shape[1]
+        samples_to_drop = num_frames * self.hop_length
+        self.buffer = self.buffer[samples_to_drop:]
+        
+        # Map mel-bands to frequency bands
+        mel_freqs = librosa.mel_frequencies(n_mels=128, fmin=FREQ_MIN, fmax=FREQ_MAX)
+        
         band_energies = {}
         band_norms = {}
         
         for low_freq, high_freq, name in FREQ_BANDS:
-            mask = (freqs >= low_freq) & (freqs < high_freq)
-            energy = np.mean(fft[mask]) if np.any(mask) else 0.0
+            # Find mel-bands in this frequency range
+            mask = (mel_freqs >= low_freq) & (mel_freqs < high_freq)
+            
+            if np.any(mask):
+                # Mean energy in this band (accounts for variable mel-band widths)
+                energy = np.mean(latest_frame[mask])
+            else:
+                energy = 0.0
+            
             band_energies[name] = energy
             
             # Update running max
             self.band_max[name] = max(energy, self.band_max[name] * self.decay_rate)
             
-            # Normalize
+            # Normalize by running max
             norm = energy / max(self.band_max[name], 0.01)
             band_norms[name] = np.clip(norm, 0, 1)
         
@@ -87,13 +132,14 @@ class AudioAnalyzer:
         mid = (band_norms.get('low_mid', 0.0) + band_norms.get('mid_high', 0.0)) / 2
         high = band_norms.get('treble', 0.0)
         
-        # Spectral features
-        magnitude = fft / (np.sum(fft) + 1e-10)
-        centroid_hz = np.sum(freqs * magnitude)
+        # Spectral centroid
+        magnitude = latest_frame / (np.sum(latest_frame) + 1e-10)
+        centroid_hz = np.sum(mel_freqs * magnitude)
         centroid_norm = np.log10(max(centroid_hz, FREQ_MIN)) / np.log10(FREQ_MAX)
         centroid_norm = np.clip(centroid_norm, 0, 1)
         
-        variance = np.sum((freqs - centroid_hz) ** 2 * magnitude)
+        # Bandwidth
+        variance = np.sum((mel_freqs - centroid_hz) ** 2 * magnitude)
         bandwidth_hz = np.sqrt(variance) if variance > 0 else 0
         bandwidth_norm = np.log10(max(bandwidth_hz, 1)) / np.log10(FREQ_MAX / 4)
         bandwidth_norm = np.clip(bandwidth_norm, 0, 1)
@@ -130,4 +176,22 @@ class AudioAnalyzer:
             "bandwidth": bandwidth_norm,
             "transient": transient,
             "envelope": self.envelope_value,
+        }
+
+    def _empty_features(self):
+        """Return silence features while buffering"""
+        return {
+            "volume": 0.0,
+            "bass": 0.0,
+            "mid": 0.0,
+            "high": 0.0,
+            "sub_bass": 0.0,
+            "bass": 0.0,
+            "low_mid": 0.0,
+            "mid_high": 0.0,
+            "treble": 0.0,
+            "centroid": 0.0,
+            "bandwidth": 0.0,
+            "transient": 0.0,
+            "envelope": 0.0,
         }
