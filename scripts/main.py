@@ -176,8 +176,8 @@ def main(audio_source='live', filepath=None):
             volume = shared_features['volume']
             envelope = shared_features['envelope']
             
-            # Create bars (8 chars max per band for compact display)
-            bar_width = 8
+            # Create bars (4 chars max per band for compact display)
+            bar_width = 4
             sub_bass_bar = '🔴' * int(sub_bass * bar_width)
             bass_bar = '🔴' * int(bass * bar_width)
             low_mid_bar = '🟡' * int(low_mid * bar_width)
