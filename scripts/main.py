@@ -184,28 +184,71 @@ def main(audio_source='live', filepath=None):
     # Main thread: print features and handle shutdown
     try:
         while True:
-            # Create ASCII spectrum visualizer with bass/mid/treble bars
-            bass = shared_features.get('bass', 0.0)
-            mid = shared_features.get('mid', 0.0)
-            high = shared_features.get('high', 0.0)
-            transient = shared_features.get('transient', 0.0)
-            volume = shared_features.get('volume', 0.0)
-            envelope = shared_features.get('envelope', 0.0)
+            spectrum = shared_features.get('spectrum', None)
             
-            # Create bars (10 chars max per band)
-            bar_width = 10
-            bass_bar = '█' * int(bass * bar_width)
-            mid_bar = '█' * int(mid * bar_width)
-            high_bar = '█' * int(high * bar_width)
+            # ANSI colors
+            RED = '\033[91m'
+            BLUE = '\033[94m'
+            RESET = '\033[0m'
             
-            # Transient indicator (flash when detected)
-            transient_char = '⚡' if transient > 0.05 else ' '
+            dominant_freq = shared_features.get('dominant_freq', 0.0)
+            tonalness = shared_features.get('tonalness', 0.0)
             
-            # Create the display
-            output = f"BASS  [{bass_bar:<{bar_width}}] {bass:5.2f}  "
-            output += f"MID   [{mid_bar:<{bar_width}}] {mid:5.2f}  "
-            output += f"HIGH  [{high_bar:<{bar_width}}] {high:5.2f}  "
-            output += f"VOL:{volume:.2f} ENV:{envelope:.2f} {transient_char}"
+            if spectrum is not None and len(spectrum) >= 32:
+                # Visualize red core and blue edges like the actual LED strips
+                bass_energy = float(np.mean(spectrum[0:10]))  # Bass energy for red core
+                treble_energy = float(np.mean(spectrum[22:32]))  # Treble energy for blue edges
+                
+                # Calculate red core size and blue edge size (matching effects.py)
+                bass_core_size = int((NUM_LEDS_PER_STRIP * NUM_STRIPS / 2) * 0.85 * bass_energy)
+                edge_size = int((NUM_LEDS_PER_STRIP * NUM_STRIPS / 2) * 0.5 * (treble_energy ** 1.2))
+                
+                # Compress 432 LEDs to ~54 chars for display (8:1 compression)
+                compression = 8
+                display_width = (NUM_LEDS_PER_STRIP // compression)
+                
+                # Strip 0: Red from left, blue on far left edge
+                output = "▐"
+                for i in range(display_width):
+                    scaled_i = i * compression
+                    dist_from_left = scaled_i
+                    if dist_from_left < edge_size:
+                        output += f"{BLUE}●{RESET}"
+                    elif dist_from_left < bass_core_size:
+                        output += f"{RED}█{RESET}"
+                    else:
+                        output += "·"
+                output += "▐ "
+                
+                # Strip 1: Red core from center
+                output += "▐"
+                center = (NUM_LEDS_PER_STRIP // 2)
+                for i in range(display_width):
+                    scaled_i = i * compression
+                    dist_from_center = abs(scaled_i - center)
+                    if dist_from_center < bass_core_size:
+                        output += f"{RED}█{RESET}"
+                    else:
+                        output += "·"
+                output += "▐ "
+                
+                # Strip 2: Red from right, blue on far right edge
+                output += "▐"
+                for i in range(display_width):
+                    scaled_i = i * compression
+                    dist_from_right = NUM_LEDS_PER_STRIP - 1 - scaled_i
+                    if dist_from_right < edge_size:
+                        output += f"{BLUE}●{RESET}"
+                    elif dist_from_right < bass_core_size:
+                        output += f"{RED}█{RESET}"
+                    else:
+                        output += "·"
+                output += "▐\n"
+                
+                # Second line: frequency and energy info
+                output += f"{dominant_freq:5.0f}Hz  T:{tonalness:.2f}  B:{bass_energy:.2f}  T:{treble_energy:.2f}     "
+            else:
+                output = "Waiting...                        "
             
             print(output, end='\r', flush=True)
             time.sleep(0.05)
