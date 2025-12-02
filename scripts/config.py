@@ -65,6 +65,8 @@ COLORS = {
 FPS_TARGET = 60              # Increased from 30 for smoother animation
 SMOOTHING_FACTOR = 0.008     # Ultra-fast (0.008) - minimal smoothing for snappy response
 BRIGHTNESS_EXPONENT = 1.5    # Log scaling for brightness (makes quiet moments darker, peaks brighter)
+# NOTE: Perceptual brightness correction in effects.py uses CIE luminance to ensure all colors
+# appear equally bright across the spectrum. Red is the baseline (1.0x), blues/cyans are dimmed.
 
 # Attack/Decay Envelope for brightness (like a synthesizer ADSR)
 ATTACK_TIME = 0.02           # How fast brightness jumps to a new peak (20ms = 1 frame at 60fps)

@@ -63,33 +63,40 @@ class LEDEffects:
     
     @staticmethod
     def get_perceptual_brightness_correction(hue_degrees):
-        """Dim non-red hues so red appears as the brightest baseline.
+        """Correct LED brightness for perceptual equivalence across the color spectrum.
         
-        Blue and orange LEDs are inherently brighter than red at equal intensity.
-        Dim them relative to red to make red feel like the dominant color.
+        Different colored LEDs have different perceived brightness at equal RGB values.
+        Red LEDs appear dimmer than blue/cyan at equal intensity. This function returns
+        a luminance multiplier so all colors appear equally bright to the human eye.
+        
+        Uses CIE luminance weighting: L = 0.2126*R + 0.7152*G + 0.0722*B
+        A target luminance of 128 (mid-range) is chosen for red, then other colors
+        are scaled to match that target luminance at their HSV values.
         
         Args:
             hue_degrees: 0-360 hue value
             
         Returns:
-            brightness_multiplier: 0.45-1.0 to apply to RGB values
+            brightness_multiplier: scales V value to achieve perceptual equivalence
         """
         # Normalize hue to 0-1
         h = (hue_degrees % 360.0) / 360.0
         
-        # Red is brightest (1.0), dim everything else very aggressively
-        # Red (0°): 1.0x (baseline), Orange (30°): 0.50x, Blue (240°): 0.25x
-        if h < 0.08:  # 0-30°: Red to Orange
-            # Gradual dim from red to orange
-            return 1.0 - ((h / 0.08) * 0.50)
-        elif h < 0.67:  # 30-240°: Skip this range (shouldn't appear in our spectrum)
-            return 0.50
-        elif h < 0.72:  # 240-260°: Deep Blue zone (our range)
-            # Very aggressive dim for blue (0.25-0.20)
-            progress = (h - 0.67) / 0.05
-            return 0.25 - (progress * 0.05)
-        else:
-            return 0.20
+        # For each hue, convert HSV(h, 1.0, 1.0) to RGB and calculate CIE luminance
+        # Then scale to match red's luminance at V=1.0
+        r_ref, g_ref, b_ref = colorsys.hsv_to_rgb(0.0, 1.0, 1.0)  # Pure red at max V
+        red_luminance = 0.2126 * r_ref + 0.7152 * g_ref + 0.0722 * b_ref
+        
+        # Get RGB for current hue at max saturation and value
+        r, g, b = colorsys.hsv_to_rgb(h, 1.0, 1.0)
+        current_luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        
+        # Return multiplier to bring this hue's luminance to match red
+        # If current_luminance is 0, return 1.0 to avoid division by zero
+        if current_luminance < 0.001:
+            return 1.0
+        
+        return red_luminance / current_luminance
     
     @staticmethod
     def frequency_spectrum(strips, features):
