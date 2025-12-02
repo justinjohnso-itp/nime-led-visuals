@@ -39,6 +39,29 @@ class LEDEffects:
     _prev_edge = 0.0
     
     @staticmethod
+    def get_band_hue(band_index):
+        """Map band index 0-31 to smooth hue gradient (0-240°).
+        
+        Red (bass) → Yellow (low-mid) → Cyan (high-mid) → Blue (treble)
+        
+        Args:
+            band_index: 0-31 spectrum band index
+            
+        Returns:
+            hue: 0-240 degrees
+        """
+        # Smooth S-curve mapping across the spectrum
+        if band_index < 11:
+            # Bands 0-10: Red (0°) to Yellow (60°) - bass warmth
+            return (band_index / 11.0) * 60.0
+        elif band_index < 22:
+            # Bands 11-21: Yellow (60°) to Cyan (180°) - mids brightness
+            return 60.0 + ((band_index - 11) / 11.0) * 120.0
+        else:
+            # Bands 22-31: Cyan (180°) to Blue (240°) - treble cool
+            return 180.0 + ((band_index - 22) / 10.0) * 60.0
+    
+    @staticmethod
     def frequency_spectrum(strips, features):
         """32-band frequency spectrum with edge effects
         
@@ -73,13 +96,10 @@ class LEDEffects:
         # Use DOMINANT BAND for color when spectrum is tonal enough
         TONALNESS_THRESHOLD = 0.15
         if dominant_band >= 0 and tonalness > TONALNESS_THRESHOLD:
-            if dominant_band < 10:
-                target_hue = 0.0      # Bass (20-173 Hz) → Red
-            elif dominant_band < 22:
-                target_hue = 30.0     # Mid (173-2.3k Hz) → Amber
-            else:
-                target_hue = 240.0    # Treble (2.3k+ Hz) → Blue
+            # Use smooth 32-band hue gradient for tonal sounds
+            target_hue = LEDEffects.get_band_hue(dominant_band)
         else:
+            # Fall back to blended hue for noisy/broadband sounds
             target_hue = blended_hue
         
         # Brightness from envelope - go fully dark when envelope is near zero
