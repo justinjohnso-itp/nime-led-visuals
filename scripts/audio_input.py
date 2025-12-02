@@ -4,6 +4,73 @@ import numpy as np
 from abc import ABC, abstractmethod
 
 
+def _select_input_device(preferred, sd, min_input_channels=2):
+    """
+    Resolve an input device index using sounddevice.
+
+    preferred:
+        - int/float: explicit device index (validated)
+        - str: case-insensitive substring matched against device name
+        - None: use default input device or first device with enough input channels
+    """
+    devices = sd.query_devices()
+
+    # 1) Explicit index
+    if isinstance(preferred, (int, float)):
+        idx = int(preferred)
+        dev = sd.query_devices(idx)
+        if dev["max_input_channels"] >= min_input_channels:
+            print(f"Using explicit input device index {idx}: {dev['name']}")
+            return idx
+        else:
+            print(
+                f"Warning: Device {idx} ('{dev['name']}') has only "
+                f"{dev['max_input_channels']} input channels; need {min_input_channels}. Ignoring."
+            )
+
+    # 2) Name pattern
+    if isinstance(preferred, str) and preferred.strip():
+        pattern = preferred.lower()
+        matches = [
+            (i, d)
+            for i, d in enumerate(devices)
+            if pattern in d["name"].lower()
+            and d.get("max_input_channels", 0) >= min_input_channels
+        ]
+        if matches:
+            idx, dev = matches[0]
+            print(f"Matched input device by pattern '{preferred}': [{idx}] {dev['name']}")
+            return idx
+        else:
+            print(
+                f"Warning: No input device matching pattern '{preferred}' "
+                f"with ≥{min_input_channels} channels found. Falling back."
+            )
+
+    # 3) Default input device, if suitable
+    try:
+        default_input_idx, _ = sd.default.device
+    except Exception:
+        default_input_idx = None
+
+    if default_input_idx is not None and default_input_idx >= 0:
+        dev = sd.query_devices(default_input_idx)
+        if dev["max_input_channels"] >= min_input_channels:
+            print(f"Using default input device [{default_input_idx}]: {dev['name']}")
+            return default_input_idx
+
+    # 4) First device with enough input channels
+    for i, dev in enumerate(devices):
+        if dev.get("max_input_channels", 0) >= min_input_channels:
+            print(f"Falling back to first suitable input device [{i}]: {dev['name']}")
+            return i
+
+    # 5) No suitable device
+    raise RuntimeError(
+        f"No audio input device with at least {min_input_channels} input channels found."
+    )
+
+
 class AudioInput(ABC):
     """Base class for audio input sources"""
 
@@ -71,12 +138,17 @@ class LiveAudioInput(AudioInput):
             print("Error: sounddevice not installed. Run: pixi add sounddevice")
             raise
 
-        print(f"Opening audio device {device}...")
+        # Resolve device by name pattern, index, or auto-select
+        resolved_device = _select_input_device(device, sd, min_input_channels=2)
+        dev_info = sd.query_devices(resolved_device)
+        channels = min(2, dev_info["max_input_channels"])
+
+        print(f"Opening audio device [{resolved_device}] '{dev_info['name']}' with {channels} channels...")
         self.stream = sd.InputStream(
-            channels=2,  # Stereo input
+            channels=channels,
             samplerate=sample_rate,
             blocksize=chunk_size,
-            device=device
+            device=resolved_device
         )
         self.stream.start()
         print("Audio stream started")
