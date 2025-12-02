@@ -63,50 +63,19 @@ class LEDEffects:
     
     @staticmethod
     def get_perceptual_brightness_correction(hue_degrees):
-        """Dim non-red hues so red appears as the brightest baseline.
+        """No correction - let brightness envelope handle overall brightness.
         
-        Physical blue/cyan LEDs are inherently brighter than red LEDs at equal RGB intensity.
-        This function returns a dimming multiplier for non-red hues to make the entire
-        color spectrum appear roughly equal brightness, with red as the reference brightness.
-        
-        Empirical LED brightness (at 8-bit RGB=255 for saturation):
-        - Red (0°): baseline 1.0x
-        - Orange (30°): ~0.75x (mix of red and bright green)
-        - Yellow (60°): ~0.55x (very bright due to green content)
-        - Green (120°): ~0.65x (bright)
-        - Cyan (180°): ~0.50x (blue + green, very bright)
-        - Blue (240°): ~0.40x (bright blue LED)
+        Perceptual brightness correction in HSV value space causes desaturation/washed-out colors.
+        Instead, we manage brightness through the audio envelope and edge intensity parameters.
+        Red dominance is achieved by controlling blue edge saturation/intensity separately.
         
         Args:
             hue_degrees: 0-360 hue value
             
         Returns:
-            brightness_multiplier: 0.4-1.0 to dim non-red hues
+            brightness_multiplier: always 1.0 (no correction)
         """
-        # Normalize hue to 0-1
-        h = (hue_degrees % 360.0) / 360.0
-        
-        # Empirical dimming curve based on LED perceived brightness
-        # Red (0°) is baseline at 1.0x, everything else is dimmed
-        if h < 0.08:  # 0-30°: Red to Orange
-            # Gradual dim from red (1.0) to orange (0.75)
-            return 1.0 - ((h / 0.08) * 0.25)
-        elif h < 0.17:  # 30-60°: Orange to Yellow
-            # Dim from orange (0.75) to yellow (0.55)
-            return 0.75 - (((h - 0.08) / 0.09) * 0.20)
-        elif h < 0.33:  # 60-120°: Yellow to Green
-            # Dim from yellow (0.55) to green (0.65) - green is brighter
-            return 0.55 + (((h - 0.17) / 0.16) * 0.10)
-        elif h < 0.50:  # 120-180°: Green to Cyan
-            # Dim from green (0.65) to cyan (0.50) - cyan is very bright
-            return 0.65 - (((h - 0.33) / 0.17) * 0.15)
-        elif h < 0.67:  # 180-240°: Cyan to Blue
-            # Dim from cyan (0.50) to blue (0.40)
-            return 0.50 - (((h - 0.50) / 0.17) * 0.10)
-        else:  # 240-360°: Blue to Red
-            # Dim from blue (0.40) back to red (1.0)
-            # This is the treble/high region (240-360)
-            return 0.40 + (((h - 0.67) / 0.33) * 0.60)
+        return 1.0
     
     @staticmethod
     def frequency_spectrum(strips, features):
@@ -191,8 +160,9 @@ class LEDEffects:
         r, g, b = colorsys.hsv_to_rgb(LEDEffects._prev_hue / 360.0, 1.0, LEDEffects._prev_brightness * brightness_correction * LED_BRIGHTNESS)
         core_color = (int(r * 255), int(g * 255), int(b * 255))
         
-        # Edge parameters - treble edges more responsive (BLUES STRONGER)
+        # Edge parameters - treble edges responsive but dimmed so red can dominate
         edge_intensity = LEDEffects._prev_edge ** 1.0  # Linear for more presence
+        edge_intensity *= 0.4  # Reduce blue edge intensity to 40% so it doesn't overpower red
         edge_size = int(NUM_LEDS_PER_STRIP * 0.85 * LEDEffects._prev_edge)  # Expand more (was 0.7)
         feather_size = max(6, edge_size // 4)  # Tighter feathering (was //3)
         
@@ -247,7 +217,7 @@ class LEDEffects:
                 # Feather blue toward core hue
                 feathered_blue_hue = 240.0 + (blue_feather_factor * (LEDEffects._prev_hue - 240.0))
                 brightness_correction_feathered = LEDEffects.get_perceptual_brightness_correction(feathered_blue_hue)
-                br_f, bg_f, bb_f = colorsys.hsv_to_rgb(feathered_blue_hue / 360.0, 1.0, edge_intensity * 1.2 * brightness_correction_feathered * LED_BRIGHTNESS)
+                br_f, bg_f, bb_f = colorsys.hsv_to_rgb(feathered_blue_hue / 360.0, 1.0, edge_intensity * brightness_correction_feathered * LED_BRIGHTNESS)
                 er, eg, eb = int(br_f * 255), int(bg_f * 255), int(bb_f * 255)
             
             final_red_blend = red_blend * (1.0 - blue_blend * 0.7)  # Blue more dominant
@@ -301,7 +271,7 @@ class LEDEffects:
                 # Blend colors with hue feathering in blue zones (right side)
                 feathered_blue_hue_right = 240.0 + (blue_feather_factor_right * (LEDEffects._prev_hue - 240.0))
                 brightness_correction_feathered_right = LEDEffects.get_perceptual_brightness_correction(feathered_blue_hue_right)
-                br_f_r, bg_f_r, bb_f_r = colorsys.hsv_to_rgb(feathered_blue_hue_right / 360.0, 1.0, edge_intensity * 1.2 * brightness_correction_feathered_right * LED_BRIGHTNESS)
+                br_f_r, bg_f_r, bb_f_r = colorsys.hsv_to_rgb(feathered_blue_hue_right / 360.0, 1.0, edge_intensity * brightness_correction_feathered_right * LED_BRIGHTNESS)
                 er_r, eg_r, eb_r = int(br_f_r * 255), int(bg_f_r * 255), int(bb_f_r * 255)
             
             final_red_blend_right = red_blend_right * (1.0 - blue_blend_right * 0.7)  # Blue more dominant
