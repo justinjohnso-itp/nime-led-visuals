@@ -3,7 +3,7 @@
 import colorsys
 import numpy as np
 from config import (
-    COLORS, NUM_LEDS_PER_STRIP, NUM_STRIPS,
+    COLORS, NUM_LEDS_PER_STRIP, NUM_STRIPS, LED_BRIGHTNESS,
     HUE_RANGE, EDGE_HUE_SHIFT, CORE_FRACTION_MIN, CORE_FRACTION_MAX,
     MIN_BRIGHTNESS, EDGE_FADE_RATE, TRANSIENT_BOOST, BRIGHTNESS_EXPONENT, FREQ_BANDS
 )
@@ -171,7 +171,7 @@ class LEDEffects:
         
         # Core color (red/amber) with subtle perceptual brightness correction
         brightness_correction = LEDEffects.get_perceptual_brightness_correction(LEDEffects._prev_hue)
-        r, g, b = colorsys.hsv_to_rgb(LEDEffects._prev_hue / 360.0, 1.0, LEDEffects._prev_brightness * brightness_correction)
+        r, g, b = colorsys.hsv_to_rgb(LEDEffects._prev_hue / 360.0, 1.0, LEDEffects._prev_brightness * brightness_correction * LED_BRIGHTNESS)
         core_color = (int(r * 255), int(g * 255), int(b * 255))
         
         # Edge parameters - treble edges more responsive (BLUES STRONGER)
@@ -190,9 +190,9 @@ class LEDEffects:
         center = NUM_LEDS_PER_STRIP // 2
         
         # Pre-calculate RGB values
-        cr, cg, cb = colorsys.hsv_to_rgb(LEDEffects._prev_hue / 360.0, 1.0, LEDEffects._prev_brightness)
-        br, bg, bb = colorsys.hsv_to_rgb(0.0, 1.0, bass_brightness)  # Pure red for bass core
-        er, eg, eb = colorsys.hsv_to_rgb(240.0 / 360.0, 1.0, edge_intensity)  # Blue
+        cr, cg, cb = colorsys.hsv_to_rgb(LEDEffects._prev_hue / 360.0, 1.0, LEDEffects._prev_brightness * LED_BRIGHTNESS)
+        br, bg, bb = colorsys.hsv_to_rgb(0.0, 1.0, bass_brightness * LED_BRIGHTNESS)  # Pure red for bass core
+        er, eg, eb = colorsys.hsv_to_rgb(240.0 / 360.0, 1.0, edge_intensity * LED_BRIGHTNESS)  # Blue
         
         # If brightness is essentially zero, just fill black and return
         if LEDEffects._prev_brightness < 0.005:
@@ -225,7 +225,7 @@ class LEDEffects:
             if blue_blend > 0:
                 # Feather blue toward core hue
                 feathered_blue_hue = 240.0 + (blue_feather_factor * (LEDEffects._prev_hue - 240.0))
-                br_f, bg_f, bb_f = colorsys.hsv_to_rgb(feathered_blue_hue / 360.0, 1.0, edge_intensity * 1.2)  # Brighter blue
+                br_f, bg_f, bb_f = colorsys.hsv_to_rgb(feathered_blue_hue / 360.0, 1.0, edge_intensity * 1.2 * LED_BRIGHTNESS)  # Brighter blue
                 er, eg, eb = int(br_f * 255), int(bg_f * 255), int(bb_f * 255)
             
             final_red_blend = red_blend * (1.0 - blue_blend * 0.7)  # Blue more dominant
@@ -248,7 +248,7 @@ class LEDEffects:
                     red_hue = feather_progress * LEDEffects._prev_hue  # Fade from red toward core hue
                 
                 # Use feathered hue for red zone
-                hr, hg, hb = colorsys.hsv_to_rgb(red_hue / 360.0, 1.0, bass_brightness)
+                hr, hg, hb = colorsys.hsv_to_rgb(red_hue / 360.0, 1.0, bass_brightness * LED_BRIGHTNESS)
                 r = int(cr * 255 * (1 - blend) + hr * 255 * blend)
                 g = int(cg * 255 * (1 - blend) + hg * 255 * blend)
                 b = int(cb * 255 * (1 - blend) + hb * 255 * blend)
@@ -277,7 +277,7 @@ class LEDEffects:
                 
                 # Blend colors with hue feathering in blue zones (right side)
                 feathered_blue_hue_right = 240.0 + (blue_feather_factor_right * (LEDEffects._prev_hue - 240.0))
-                br_f_r, bg_f_r, bb_f_r = colorsys.hsv_to_rgb(feathered_blue_hue_right / 360.0, 1.0, edge_intensity * 1.2)  # Brighter blue
+                br_f_r, bg_f_r, bb_f_r = colorsys.hsv_to_rgb(feathered_blue_hue_right / 360.0, 1.0, edge_intensity * 1.2 * LED_BRIGHTNESS)  # Brighter blue
                 er_r, eg_r, eb_r = int(br_f_r * 255), int(bg_f_r * 255), int(bb_f_r * 255)
             
             final_red_blend_right = red_blend_right * (1.0 - blue_blend_right * 0.7)  # Blue more dominant
