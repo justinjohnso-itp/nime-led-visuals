@@ -149,11 +149,11 @@ class LEDEffects:
         else:
             LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.25  # Fast decay
         
-        # Bass smoothing - instant rise, very fast additive decay
+        # Bass smoothing - instant rise, extremely fast decay for spiky response
         if bass_energy > LEDEffects._prev_bass:
             LEDEffects._prev_bass = bass_energy  # Instant
         else:
-            LEDEffects._prev_bass += (bass_energy - LEDEffects._prev_bass) * 0.04  # Very fast decay
+            LEDEffects._prev_bass += (bass_energy - LEDEffects._prev_bass) * 0.02  # Extremely fast decay (spiky)
         
         # Simple: just red core and blue edges, both dynamic
         red_brightness = LEDEffects._prev_bass * LEDEffects._prev_brightness * LED_BRIGHTNESS  # Red follows bass
@@ -169,8 +169,8 @@ class LEDEffects:
         total_leds = NUM_LEDS_PER_STRIP * NUM_STRIPS
         center = total_leds // 2
         
-        # Red core size and blue edge size (bigger red core now)
-        red_core_size = int(total_leds * 0.3 * LEDEffects._prev_bass)  # 0-30% from center outward
+        # Red core size and blue edge size
+        red_core_size = int(total_leds * 0.45 * LEDEffects._prev_bass)  # 0-45% from center outward (bigger)
         blue_edge_size = int(total_leds * 0.2 * LEDEffects._prev_edge)  # 0-20% on each end
         
         # Build full 432-LED array with feathering
