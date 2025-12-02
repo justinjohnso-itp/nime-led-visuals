@@ -148,10 +148,10 @@ class LEDEffects:
         edge_size = int(NUM_LEDS_PER_STRIP * 0.85 * LEDEffects._prev_edge)  # Expand more (was 0.7)
         feather_size = max(6, edge_size // 4)  # Tighter feathering (was //3)
         
-        # Aggressive red core: fills center strip and bleeds into outer strips
+        # Red core: responsive to bass, doesn't always fill the strip
         # Faster decay but strong presence when active
-        bass_core_size = int(NUM_LEDS_PER_STRIP * (0.85 + 0.15 * (LEDEffects._prev_bass / (LEDEffects._prev_bass + 0.15))))
-        bass_feather_size = max(8, bass_core_size // 3)  # Feather zone for smooth bleed
+        bass_core_size = int(NUM_LEDS_PER_STRIP * 0.4 * LEDEffects._prev_bass)  # Smaller, more responsive core
+        bass_feather_size = max(6, bass_core_size // 3)  # Feather zone for smooth bleed
         bass_brightness = LEDEffects._prev_brightness
         # Red intensity: full strength when bass present, fades to zero when silent
         bass_intensity = min(1.0, LEDEffects._prev_bass * 3.5)  # More aggressive red bleed
@@ -174,7 +174,7 @@ class LEDEffects:
             # Strip 0: Red core from LEFT edge (opposite side from blue edges)
             # Red bleeds in from the left, blue edge only on right edge (far left indices)
             dist_from_left = i  # 0 at left edge
-            red_blend = min(1.0, (dist_from_left + 1) / bass_core_size) * bass_intensity if dist_from_left < bass_core_size else 1.0
+            red_blend = min(1.0, (dist_from_left + 1) / max(bass_core_size, 1)) * bass_intensity if bass_core_size > 0 and dist_from_left < bass_core_size else 0.0
             
             # Blue edge only at the far left indices (opposite of strip 2)
             dist_from_outer_left = i  # Distance from index 0
@@ -228,7 +228,7 @@ class LEDEffects:
             # Strip 2: Red core from RIGHT edge (opposite side from blue edges)
             # Red bleeds in from the right, blue edge only on far right indices
             dist_from_right = NUM_LEDS_PER_STRIP - 1 - i  # 0 at right edge
-            red_blend_right = min(1.0, (dist_from_right + 1) / bass_core_size) * bass_intensity if dist_from_right < bass_core_size else 1.0
+            red_blend_right = min(1.0, (dist_from_right + 1) / max(bass_core_size, 1)) * bass_intensity if bass_core_size > 0 and dist_from_right < bass_core_size else 0.0
             
             # Blue edge only at the far right indices (opposite of strip 0)
             dist_from_outer_right = NUM_LEDS_PER_STRIP - 1 - i  # Distance from right edge
