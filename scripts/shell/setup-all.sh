@@ -145,6 +145,8 @@ fi
 
 echo "  ✓ pixi available: $(which pixi)"
 echo "  Running 'pixi install'..."
+# Clean lock if previous install failed (allows script to recover from network errors)
+rm -f pixi.lock
 pixi install
 echo "  ✓ Python dependencies installed"
 
