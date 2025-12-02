@@ -62,6 +62,35 @@ class LEDEffects:
             return 240.0 - ((band_index - 16) / 16.0) * 30.0
     
     @staticmethod
+    def get_perceptual_brightness_correction(hue_degrees):
+        """Correct brightness so all hues appear equally bright.
+        
+        Blue LEDs are inherently brighter than red at equal intensity.
+        Dim blue slightly to balance perceived brightness across hues.
+        
+        Args:
+            hue_degrees: 0-360 hue value
+            
+        Returns:
+            brightness_multiplier: 0.7-1.0 to apply to RGB values
+        """
+        # Normalize hue to 0-1
+        h = (hue_degrees % 360.0) / 360.0
+        
+        # Subtle correction: make all hues feel equally bright
+        # Red (0°): 1.0x (baseline), Blue (240°): 0.75x (slightly dimmed)
+        if h < 0.08:  # 0-30°: Red to Orange
+            return 1.0  # No change for red/orange
+        elif h < 0.67:  # 30-240°: Skip this range
+            return 1.0
+        elif h < 0.72:  # 240-260°: Deep Blue zone
+            # Subtle dim for blue (0.75-0.70)
+            progress = (h - 0.67) / 0.05
+            return 0.75 - (progress * 0.05)
+        else:
+            return 0.70
+    
+    @staticmethod
     def frequency_spectrum(strips, features):
         """32-band frequency spectrum with edge effects
         
@@ -139,8 +168,9 @@ class LEDEffects:
         else:
             LEDEffects._prev_bass += (bass_energy - LEDEffects._prev_bass) * 0.1  # Very fast decay for punch
         
-        # Core color (red/amber) - NO perceptual dimming, keep colors vibrant
-        r, g, b = colorsys.hsv_to_rgb(LEDEffects._prev_hue / 360.0, 1.0, LEDEffects._prev_brightness)
+        # Core color (red/amber) with subtle perceptual brightness correction
+        brightness_correction = LEDEffects.get_perceptual_brightness_correction(LEDEffects._prev_hue)
+        r, g, b = colorsys.hsv_to_rgb(LEDEffects._prev_hue / 360.0, 1.0, LEDEffects._prev_brightness * brightness_correction)
         core_color = (int(r * 255), int(g * 255), int(b * 255))
         
         # Edge parameters - treble edges more responsive (BLUES STRONGER)
