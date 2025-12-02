@@ -184,6 +184,10 @@ class LEDEffects:
             # Less bassy = more oranges, more feathering
             if red_core_size > 0 and dist_from_center < red_core_size:
                 red_blend = max(0.0, 1.0 - (dist_from_center / red_core_size))
+                # Distance-based dimming: center stays bright, edges dim faster
+                # Center (distance 0) = 1.0x, edges = 0.4x multiplier
+                distance_factor = 1.0 - (dist_from_center / red_core_size) * 0.6
+                
                 # Dynamic feather zone: high bass = small feather zone (more red), low bass = large feather zone (more orange)
                 feather_start = red_core_size * (0.5 + 0.3 * LEDEffects._prev_bass)  # 0.5-0.8 range
                 if dist_from_center > feather_start:
@@ -195,7 +199,7 @@ class LEDEffects:
                     hue_shift = 0.0
                 red_hue = hue_shift / 360.0
                 red_sat = 1.0
-                red_val = red_brightness * red_blend  # Brightness fades with distance
+                red_val = red_brightness * red_blend * distance_factor  # Center dims slower than edges
                 r_f, g_f, b_f = colorsys.hsv_to_rgb(red_hue, red_sat, red_val)
                 r_red = int(r_f * 255)
                 g_red = int(g_f * 255)
