@@ -2,7 +2,40 @@
 
 Audio-reactive LED visualization. Shows dominant audio frequencies as a color gradient (red=bass, blue=treble) across 432 LEDs (3 strips × 144 LEDs each).
 
-## Setup
+## Quick Start (Raspberry Pi Desktop/Lite)
+
+### Automated Setup (Recommended)
+
+On a fresh Raspberry Pi OS (Desktop or Lite), run:
+
+```bash
+cd ~/Code/nime-led-visuals
+./scripts/shell/setup-all.sh
+```
+
+This script:
+- Installs system dependencies (ALSA, PulseAudio, PortAudio, build tools)
+- Enables I2C, SPI, and console auto-login via raspi-config
+- Adds your user to `audio`, `gpio`, `i2c`, `spi` groups
+- Configures WiFi (MrPineapple by default)
+- Installs pixi and Python dependencies
+- Installs systemd service for auto-start at boot
+
+After setup completes, reboot:
+
+```bash
+sudo reboot
+```
+
+Visualization starts automatically. View logs with:
+
+```bash
+journalctl -u nime-led-visuals -f
+```
+
+### Manual Setup (macOS Development)
+
+On macOS with pixi installed:
 
 ```bash
 pixi install
@@ -10,18 +43,27 @@ pixi install
 
 ## Run
 
-```bash
-# Live audio from USB interface
-pixi run run-live
+### On Raspberry Pi
 
-# Test with audio file
+```bash
+# Test LED strips
+pixi run test-leds
+
+# Test audio with file
 pixi run test-audio music/test.mp3
 
-# Test LED visualization
-pixi run python scripts/tests/test_led_viz.py
+# Run live visualization
+pixi run run-live
 
-# Test complete pipeline
-pixi run python scripts/tests/test_complete_pipeline.py
+# View service logs
+journalctl -u nime-led-visuals -f
+```
+
+### On macOS
+
+```bash
+# Test audio analysis
+pixi run test-audio music/test.mp3
 ```
 
 ## How It Works
