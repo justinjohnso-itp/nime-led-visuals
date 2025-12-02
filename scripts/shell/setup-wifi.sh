@@ -25,14 +25,14 @@ if command -v nmcli &> /dev/null; then
     # Add or update connection
     if nmcli connection show "${SSID}" &> /dev/null; then
         echo "Updating existing connection..."
-        nmcli connection modify "${SSID}" \
+        sudo nmcli connection modify "${SSID}" \
             wifi-sec.key-mgmt wpa-psk \
             wifi-sec.psk "${PASSWORD}" \
             connection.autoconnect yes \
             connection.autoconnect-priority "${PRIORITY}"
     else
         echo "Creating new connection..."
-        nmcli connection add \
+        sudo nmcli connection add \
             type wifi \
             con-name "${SSID}" \
             ssid "${SSID}" \
