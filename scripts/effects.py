@@ -37,6 +37,7 @@ class LEDEffects:
     _prev_hue = 0.0
     _prev_brightness = 0.0
     _prev_edge = 0.0
+    _prev_bass = 0.0  # Track bass intensity separately for faster decay
     
     @staticmethod
     def get_band_hue(band_index):
@@ -126,28 +127,34 @@ class LEDEffects:
         else:
             LEDEffects._prev_brightness += (target_brightness - LEDEffects._prev_brightness) * decay
         
-        # Edge smoothing
+        # Edge smoothing - FASTER for treble (more dynamic)
         if target_edge > LEDEffects._prev_edge:
-            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * attack
+            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.95  # Very quick rise
         else:
-            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * decay
+            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.08  # Fast decay (was 0.5)
         
-        # Core color (red/amber)
+        # Bass smoothing - responsive but with faster release
+        if bass_energy > LEDEffects._prev_bass:
+            LEDEffects._prev_bass += (bass_energy - LEDEffects._prev_bass) * 0.95
+        else:
+            LEDEffects._prev_bass += (bass_energy - LEDEffects._prev_bass) * 0.1  # Very fast decay for punch
+        
+        # Core color (red/amber) - NO perceptual dimming, keep colors vibrant
         r, g, b = colorsys.hsv_to_rgb(LEDEffects._prev_hue / 360.0, 1.0, LEDEffects._prev_brightness)
         core_color = (int(r * 255), int(g * 255), int(b * 255))
         
-        # Edge parameters
-        edge_intensity = LEDEffects._prev_edge ** 1.5  # Curve for dynamic range
-        edge_size = int(NUM_LEDS_PER_STRIP * 0.6 * LEDEffects._prev_edge)
-        feather_size = max(10, edge_size // 2)  # Gradient zone (at least 10 LEDs)
+        # Edge parameters - treble edges more responsive
+        edge_intensity = LEDEffects._prev_edge ** 1.2  # Less aggressive curve
+        edge_size = int(NUM_LEDS_PER_STRIP * 0.7 * LEDEffects._prev_edge)  # Can expand further
+        feather_size = max(8, edge_size // 3)  # Smooth feathering
         
         # Aggressive red core: fills center strip and bleeds into outer strips
-        # At max bass energy, fills entire strip; at zero, contracts to center
-        bass_core_size = int(NUM_LEDS_PER_STRIP * (0.85 + 0.15 * (bass_energy / (bass_energy + 0.2))))
+        # Faster decay but strong presence when active
+        bass_core_size = int(NUM_LEDS_PER_STRIP * (0.85 + 0.15 * (LEDEffects._prev_bass / (LEDEffects._prev_bass + 0.15))))
         bass_feather_size = max(8, bass_core_size // 3)  # Feather zone for smooth bleed
         bass_brightness = LEDEffects._prev_brightness
         # Red intensity: full strength when bass present, fades to zero when silent
-        bass_intensity = min(1.0, bass_energy * 3.0)  # More aggressive red bleed
+        bass_intensity = min(1.0, LEDEffects._prev_bass * 3.5)  # More aggressive red bleed
         
         center = NUM_LEDS_PER_STRIP // 2
         
@@ -172,34 +179,48 @@ class LEDEffects:
             # Blue edge only at the far left indices (opposite of strip 2)
             dist_from_outer_left = i  # Distance from index 0
             blue_blend = 0.0
+            blue_feather_factor = 1.0  # Hue feathering from blue toward core
             if dist_from_outer_left < edge_size:
                 if dist_from_outer_left < edge_size - feather_size:
                     blue_blend = 1.0
+                    blue_feather_factor = 0.0
                 else:
-                    blue_blend = 1.0 - ((dist_from_outer_left - (edge_size - feather_size)) / feather_size)
-                blue_blend = blue_blend * edge_intensity
+                    # Feather zone: blend from blue (240°) toward core hue
+                    feather_progress = (dist_from_outer_left - (edge_size - feather_size)) / feather_size
+                    blue_blend = (1.0 - feather_progress) * edge_intensity
+                    blue_feather_factor = feather_progress  # Gradually move toward core hue
             
-            # Blend: red core takes priority, blue edges appear on outer boundary
-            final_red_blend = red_blend * (1.0 - blue_blend * 0.6)  # Blue slightly reduces red
-            r = int(cr * 255 * (1 - final_red_blend) + br * 255 * final_red_blend + er * 255 * blue_blend * 0.3)
-            g = int(cg * 255 * (1 - final_red_blend) + bg * 255 * final_red_blend + eg * 255 * blue_blend * 0.3)
-            b = int(cb * 255 * (1 - final_red_blend) + bb * 255 * final_red_blend + eb * 255 * blue_blend * 0.3)
+            # Blend colors with hue feathering in blue zones
+            if blue_blend > 0:
+                # Feather blue toward core hue
+                feathered_blue_hue = 240.0 + (blue_feather_factor * (LEDEffects._prev_hue - 240.0))
+                br_f, bg_f, bb_f = colorsys.hsv_to_rgb(feathered_blue_hue / 360.0, 1.0, edge_intensity)
+                er, eg, eb = int(br_f * 255), int(bg_f * 255), int(bb_f * 255)
+            
+            final_red_blend = red_blend * (1.0 - blue_blend * 0.6)
+            r = int(cr * 255 * (1 - final_red_blend) + br * 255 * final_red_blend + er * blue_blend * 0.5)
+            g = int(cg * 255 * (1 - final_red_blend) + bg * 255 * final_red_blend + eg * blue_blend * 0.5)
+            b = int(cb * 255 * (1 - final_red_blend) + bb * 255 * final_red_blend + eb * blue_blend * 0.5)
             strips[0][i] = (int(max(0, min(255, r))), int(max(0, min(255, g))), int(max(0, min(255, b))))
             
-            # Strip 1: bass core from center with feathered gradient
+            # Strip 1: bass core from center with feathered gradient AND hue feathering
             dist_from_center = abs(i - center)
             if dist_from_center < bass_core_size:
                 if dist_from_center < bass_core_size - bass_feather_size:
-                    # Solid core zone
+                    # Solid core zone: pure red (0°)
                     blend = 1.0
+                    red_hue = 0.0
                 else:
-                    # Feather zone - gradient from red to core color
-                    blend = 1.0 - ((dist_from_center - (bass_core_size - bass_feather_size)) / max(bass_feather_size, 1))
-                blend = blend * bass_intensity
-                # Blend red over core color
-                r = int(cr * 255 * (1 - blend) + br * 255 * blend)
-                g = int(cg * 255 * (1 - blend) + bg * 255 * blend)
-                b = int(cb * 255 * (1 - blend) + bb * 255 * blend)
+                    # Feather zone - gradient from red (0°) to core hue
+                    feather_progress = (dist_from_center - (bass_core_size - bass_feather_size)) / max(bass_feather_size, 1)
+                    blend = (1.0 - feather_progress) * bass_intensity
+                    red_hue = feather_progress * LEDEffects._prev_hue  # Fade from red toward core hue
+                
+                # Use feathered hue for red zone
+                hr, hg, hb = colorsys.hsv_to_rgb(red_hue / 360.0, 1.0, bass_brightness)
+                r = int(cr * 255 * (1 - blend) + hr * 255 * blend)
+                g = int(cg * 255 * (1 - blend) + hg * 255 * blend)
+                b = int(cb * 255 * (1 - blend) + hb * 255 * blend)
                 strips[1][i] = (r, g, b)
             else:
                 strips[1][i] = core_color
@@ -212,18 +233,26 @@ class LEDEffects:
             # Blue edge only at the far right indices (opposite of strip 0)
             dist_from_outer_right = NUM_LEDS_PER_STRIP - 1 - i  # Distance from right edge
             blue_blend_right = 0.0
+            blue_feather_factor_right = 1.0
             if dist_from_outer_right < edge_size:
                 if dist_from_outer_right < edge_size - feather_size:
                     blue_blend_right = 1.0
+                    blue_feather_factor_right = 0.0
                 else:
-                    blue_blend_right = 1.0 - ((dist_from_outer_right - (edge_size - feather_size)) / feather_size)
-                blue_blend_right = blue_blend_right * edge_intensity
+                    feather_progress_right = (dist_from_outer_right - (edge_size - feather_size)) / feather_size
+                    blue_blend_right = (1.0 - feather_progress_right) * edge_intensity
+                    blue_feather_factor_right = feather_progress_right
             
-            # Blend: red core takes priority, blue edges appear on outer boundary
+            # Blend colors with hue feathering in blue zones (right side)
+            if blue_blend_right > 0:
+                feathered_blue_hue_right = 240.0 + (blue_feather_factor_right * (LEDEffects._prev_hue - 240.0))
+                br_f_r, bg_f_r, bb_f_r = colorsys.hsv_to_rgb(feathered_blue_hue_right / 360.0, 1.0, edge_intensity)
+                er_r, eg_r, eb_r = int(br_f_r * 255), int(bg_f_r * 255), int(bb_f_r * 255)
+            
             final_red_blend_right = red_blend_right * (1.0 - blue_blend_right * 0.6)
-            r = int(cr * 255 * (1 - final_red_blend_right) + br * 255 * final_red_blend_right + er * 255 * blue_blend_right * 0.3)
-            g = int(cg * 255 * (1 - final_red_blend_right) + bg * 255 * final_red_blend_right + eg * 255 * blue_blend_right * 0.3)
-            b = int(cb * 255 * (1 - final_red_blend_right) + bb * 255 * final_red_blend_right + eb * 255 * blue_blend_right * 0.3)
+            r = int(cr * 255 * (1 - final_red_blend_right) + br * 255 * final_red_blend_right + er_r * blue_blend_right * 0.5)
+            g = int(cg * 255 * (1 - final_red_blend_right) + bg * 255 * final_red_blend_right + eg_r * blue_blend_right * 0.5)
+            b = int(cb * 255 * (1 - final_red_blend_right) + bb * 255 * final_red_blend_right + eb_r * blue_blend_right * 0.5)
             strips[2][i] = (int(max(0, min(255, r))), int(max(0, min(255, g))), int(max(0, min(255, b))))
 
     @staticmethod
