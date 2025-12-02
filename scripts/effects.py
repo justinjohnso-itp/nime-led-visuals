@@ -234,6 +234,7 @@ class LEDEffects:
             dist_from_outer_right = NUM_LEDS_PER_STRIP - 1 - i  # Distance from right edge
             blue_blend_right = 0.0
             blue_feather_factor_right = 1.0
+            er_r, eg_r, eb_r = 0, 0, 0  # Default blue edge color
             if dist_from_outer_right < edge_size:
                 if dist_from_outer_right < edge_size - feather_size:
                     blue_blend_right = 1.0
@@ -242,9 +243,8 @@ class LEDEffects:
                     feather_progress_right = (dist_from_outer_right - (edge_size - feather_size)) / feather_size
                     blue_blend_right = (1.0 - feather_progress_right) * edge_intensity
                     blue_feather_factor_right = feather_progress_right
-            
-            # Blend colors with hue feathering in blue zones (right side)
-            if blue_blend_right > 0:
+                
+                # Blend colors with hue feathering in blue zones (right side)
                 feathered_blue_hue_right = 240.0 + (blue_feather_factor_right * (LEDEffects._prev_hue - 240.0))
                 br_f_r, bg_f_r, bb_f_r = colorsys.hsv_to_rgb(feathered_blue_hue_right / 360.0, 1.0, edge_intensity)
                 er_r, eg_r, eb_r = int(br_f_r * 255), int(bg_f_r * 255), int(bb_f_r * 255)
