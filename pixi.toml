@@ -16,10 +16,10 @@ librosa = ">=0.11.0"
 sounddevice = ">=0.4.6"
 
 [tasks]
-test-audio = "python scripts/test_audio.py music/test.mp3"
-test-leds = "bash run_leds.sh"
-run-file = "bash run_file.sh --file test.mp3"
-run-live = "bash run_live.sh"
+test-audio = "python scripts/tests/test_audio.py music/test.mp3"
+test-leds = "bash scripts/shell/run_leds.sh"
+run-file = "bash scripts/shell/run_file.sh --file test.mp3"
+run-live = "bash scripts/shell/run_live.sh"
 
 [target.linux-aarch64.pypi-dependencies]
 "RPi.GPIO" = ">=0.7.0"
