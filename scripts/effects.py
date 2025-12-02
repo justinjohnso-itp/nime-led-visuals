@@ -143,8 +143,8 @@ class LEDEffects:
         
         # Fill strips with feathered edge effects
         for i in range(NUM_LEDS_PER_STRIP):
-            # Strip 0: edge at high indices (right side) with gradient
-            dist_from_edge = NUM_LEDS_PER_STRIP - 1 - i  # 0 at right edge
+            # Strip 0: edge at low indices (left side) with gradient
+            dist_from_edge = i  # 0 at left edge
             if dist_from_edge < edge_size:
                 if dist_from_edge < edge_size - feather_size:
                     # Solid edge zone
@@ -179,8 +179,8 @@ class LEDEffects:
             else:
                 strips[1][i] = core_color
             
-            # Strip 2: edge at low indices (left side) with gradient
-            dist_from_edge = i  # 0 at left edge
+            # Strip 2: edge at high indices (right side) with gradient
+            dist_from_edge = NUM_LEDS_PER_STRIP - 1 - i  # 0 at right edge
             if dist_from_edge < edge_size:
                 if dist_from_edge < edge_size - feather_size:
                     blend = 1.0
