@@ -184,48 +184,28 @@ def main(audio_source='live', filepath=None):
     # Main thread: print features and handle shutdown
     try:
         while True:
-            spectrum = shared_features.get('spectrum', None)
-            envelope = shared_features['envelope']
+            # Create ASCII spectrum visualizer with bass/mid/treble bars
+            bass = shared_features.get('bass', 0.0)
+            mid = shared_features.get('mid', 0.0)
+            high = shared_features.get('high', 0.0)
+            transient = shared_features.get('transient', 0.0)
+            volume = shared_features.get('volume', 0.0)
+            envelope = shared_features.get('envelope', 0.0)
             
-            # ANSI colors
-            RED = '\033[91m'
-            ORANGE = '\033[33m'
-            BLUE = '\033[94m'
-            RESET = '\033[0m'
+            # Create bars (10 chars max per band)
+            bar_width = 10
+            bass_bar = '█' * int(bass * bar_width)
+            mid_bar = '█' * int(mid * bar_width)
+            high_bar = '█' * int(high * bar_width)
             
-            dominant_band = shared_features.get('dominant_band', -1)
-            tonalness = shared_features.get('tonalness', 0.0)
-            dominant_freq = shared_features.get('dominant_freq', 0.0)
+            # Transient indicator (flash when detected)
+            transient_char = '⚡' if transient > 0.05 else ' '
             
-            if spectrum is not None and len(spectrum) >= 32:
-                # 32-band spectrum as single line with height chars
-                output = ""
-                for i, val in enumerate(spectrum):
-                    # Match new color scheme: reds (0-15), blues (16-31)
-                    if i < 16:
-                        color = RED  # Bands 0-15: Red/Orange warmth
-                    else:
-                        color = BLUE  # Bands 16-31: Blue/Cyan cool
-                    
-                    # Highlight dominant band
-                    if i == dominant_band:
-                        char = '▓'  # Different char for dominant
-                    elif val > 0.8:
-                        char = '█'
-                    elif val > 0.6:
-                        char = '▆'
-                    elif val > 0.4:
-                        char = '▄'
-                    elif val > 0.2:
-                        char = '▂'
-                    else:
-                        char = '░'
-                    output += f"{color}{char}{RESET}"
-                
-                # Show dominant freq and tonalness
-                output += f" {dominant_freq:5.0f}Hz T:{tonalness:.2f}  "
-            else:
-                output = "Waiting...                        "
+            # Create the display
+            output = f"BASS  [{bass_bar:<{bar_width}}] {bass:5.2f}  "
+            output += f"MID   [{mid_bar:<{bar_width}}] {mid:5.2f}  "
+            output += f"HIGH  [{high_bar:<{bar_width}}] {high:5.2f}  "
+            output += f"VOL:{volume:.2f} ENV:{envelope:.2f} {transient_char}"
             
             print(output, end='\r', flush=True)
             time.sleep(0.05)
