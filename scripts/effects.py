@@ -77,19 +77,19 @@ class LEDEffects:
         # Normalize hue to 0-1
         h = (hue_degrees % 360.0) / 360.0
         
-        # Red is brightest (1.0), dim everything else
-        # Red (0°): 1.0x (baseline), Orange (30°): 0.65x, Blue (240°): 0.45x
+        # Red is brightest (1.0), dim everything else very aggressively
+        # Red (0°): 1.0x (baseline), Orange (30°): 0.50x, Blue (240°): 0.25x
         if h < 0.08:  # 0-30°: Red to Orange
             # Gradual dim from red to orange
-            return 1.0 - ((h / 0.08) * 0.35)
+            return 1.0 - ((h / 0.08) * 0.50)
         elif h < 0.67:  # 30-240°: Skip this range (shouldn't appear in our spectrum)
-            return 0.65
+            return 0.50
         elif h < 0.72:  # 240-260°: Deep Blue zone (our range)
-            # Strong dim for blue (0.45-0.40)
+            # Very aggressive dim for blue (0.25-0.20)
             progress = (h - 0.67) / 0.05
-            return 0.45 - (progress * 0.05)
+            return 0.25 - (progress * 0.05)
         else:
-            return 0.40
+            return 0.20
     
     @staticmethod
     def frequency_spectrum(strips, features):
