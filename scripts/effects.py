@@ -127,33 +127,33 @@ class LEDEffects:
         # Edge intensity from treble (now 0-1 range since we use mean)
         target_edge = treble_energy  # Direct mapping, already 0-1
         
-        # Smoothing - fast edges for transient response
-        attack = 0.9
-        decay = 0.5
+        # Smoothing - very snappy for dynamic range
+        attack = 0.8
+        decay = 0.15
         
         # Hue smoothing
         hue_diff = target_hue - LEDEffects._prev_hue
         LEDEffects._prev_hue += hue_diff * (attack if hue_diff > 0 else decay)
         
-        # Brightness smoothing - faster decay to zero
+        # Brightness smoothing - very aggressive decay to zero for dynamic peaks
         if target_brightness > LEDEffects._prev_brightness:
             LEDEffects._prev_brightness += (target_brightness - LEDEffects._prev_brightness) * attack
         elif target_brightness < 0.01:
-            LEDEffects._prev_brightness *= 0.7  # Fast fade to black
+            LEDEffects._prev_brightness *= 0.4  # Very fast fade to black
         else:
             LEDEffects._prev_brightness += (target_brightness - LEDEffects._prev_brightness) * decay
         
-        # Edge smoothing - fast response, snappy decay
+        # Edge smoothing - instant rise, aggressive decay
         if target_edge > LEDEffects._prev_edge:
-            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.95  # Quick rise
+            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 1.0  # Instant
         else:
-            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.3  # Fast decay for responsiveness
+            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.1  # Very fast decay
         
-        # Bass smoothing - fast response, snappy decay
+        # Bass smoothing - instant rise, aggressive decay
         if bass_energy > LEDEffects._prev_bass:
-            LEDEffects._prev_bass += (bass_energy - LEDEffects._prev_bass) * 0.95
+            LEDEffects._prev_bass += (bass_energy - LEDEffects._prev_bass) * 1.0  # Instant
         else:
-            LEDEffects._prev_bass += (bass_energy - LEDEffects._prev_bass) * 0.2  # Fast decay for punch
+            LEDEffects._prev_bass += (bass_energy - LEDEffects._prev_bass) * 0.08  # Very aggressive decay
         
         # Simple: just red core and blue edges, both dynamic
         red_brightness = LEDEffects._prev_bass * LEDEffects._prev_brightness * LED_BRIGHTNESS  # Red follows bass
