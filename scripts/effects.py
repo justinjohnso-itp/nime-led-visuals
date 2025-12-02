@@ -63,40 +63,50 @@ class LEDEffects:
     
     @staticmethod
     def get_perceptual_brightness_correction(hue_degrees):
-        """Correct LED brightness for perceptual equivalence across the color spectrum.
+        """Dim non-red hues so red appears as the brightest baseline.
         
-        Different colored LEDs have different perceived brightness at equal RGB values.
-        Red LEDs appear dimmer than blue/cyan at equal intensity. This function returns
-        a luminance multiplier so all colors appear equally bright to the human eye.
+        Physical blue/cyan LEDs are inherently brighter than red LEDs at equal RGB intensity.
+        This function returns a dimming multiplier for non-red hues to make the entire
+        color spectrum appear roughly equal brightness, with red as the reference brightness.
         
-        Uses CIE luminance weighting: L = 0.2126*R + 0.7152*G + 0.0722*B
-        A target luminance of 128 (mid-range) is chosen for red, then other colors
-        are scaled to match that target luminance at their HSV values.
+        Empirical LED brightness (at 8-bit RGB=255 for saturation):
+        - Red (0°): baseline 1.0x
+        - Orange (30°): ~0.75x (mix of red and bright green)
+        - Yellow (60°): ~0.55x (very bright due to green content)
+        - Green (120°): ~0.65x (bright)
+        - Cyan (180°): ~0.50x (blue + green, very bright)
+        - Blue (240°): ~0.40x (bright blue LED)
         
         Args:
             hue_degrees: 0-360 hue value
             
         Returns:
-            brightness_multiplier: scales V value to achieve perceptual equivalence
+            brightness_multiplier: 0.4-1.0 to dim non-red hues
         """
         # Normalize hue to 0-1
         h = (hue_degrees % 360.0) / 360.0
         
-        # For each hue, convert HSV(h, 1.0, 1.0) to RGB and calculate CIE luminance
-        # Then scale to match red's luminance at V=1.0
-        r_ref, g_ref, b_ref = colorsys.hsv_to_rgb(0.0, 1.0, 1.0)  # Pure red at max V
-        red_luminance = 0.2126 * r_ref + 0.7152 * g_ref + 0.0722 * b_ref
-        
-        # Get RGB for current hue at max saturation and value
-        r, g, b = colorsys.hsv_to_rgb(h, 1.0, 1.0)
-        current_luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
-        
-        # Return multiplier to bring this hue's luminance to match red
-        # If current_luminance is 0, return 1.0 to avoid division by zero
-        if current_luminance < 0.001:
-            return 1.0
-        
-        return red_luminance / current_luminance
+        # Empirical dimming curve based on LED perceived brightness
+        # Red (0°) is baseline at 1.0x, everything else is dimmed
+        if h < 0.08:  # 0-30°: Red to Orange
+            # Gradual dim from red (1.0) to orange (0.75)
+            return 1.0 - ((h / 0.08) * 0.25)
+        elif h < 0.17:  # 30-60°: Orange to Yellow
+            # Dim from orange (0.75) to yellow (0.55)
+            return 0.75 - (((h - 0.08) / 0.09) * 0.20)
+        elif h < 0.33:  # 60-120°: Yellow to Green
+            # Dim from yellow (0.55) to green (0.65) - green is brighter
+            return 0.55 + (((h - 0.17) / 0.16) * 0.10)
+        elif h < 0.50:  # 120-180°: Green to Cyan
+            # Dim from green (0.65) to cyan (0.50) - cyan is very bright
+            return 0.65 - (((h - 0.33) / 0.17) * 0.15)
+        elif h < 0.67:  # 180-240°: Cyan to Blue
+            # Dim from cyan (0.50) to blue (0.40)
+            return 0.50 - (((h - 0.50) / 0.17) * 0.10)
+        else:  # 240-360°: Blue to Red
+            # Dim from blue (0.40) back to red (1.0)
+            # This is the treble/high region (240-360)
+            return 0.40 + (((h - 0.67) / 0.33) * 0.60)
     
     @staticmethod
     def frequency_spectrum(strips, features):
