@@ -149,11 +149,11 @@ class LEDEffects:
         else:
             LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.25  # Fast decay
         
-        # Bass smoothing - instant rise, extremely fast decay for spiky response
+        # Bass smoothing - instant rise, ultra-aggressive decay for maximum movement
         if bass_energy > LEDEffects._prev_bass:
             LEDEffects._prev_bass = bass_energy  # Instant
         else:
-            LEDEffects._prev_bass += (bass_energy - LEDEffects._prev_bass) * 0.02  # Extremely fast decay (spiky)
+            LEDEffects._prev_bass *= 0.5  # Drop to 50% each frame (collapses in ~2 frames)
         
         # Simple: just red core and blue edges, both dynamic
         red_brightness = LEDEffects._prev_bass * LEDEffects._prev_brightness * LED_BRIGHTNESS  # Red follows bass
@@ -179,12 +179,13 @@ class LEDEffects:
             # Distance from center (0 at center, increases toward edges)
             dist_from_center = abs(i - center)
             
-            # Red core: spreads from center outward with hue feathering only at edges
-            # Red (0°) for most of it → Orange (30°) only in outer 20%, with brightness falloff
+            # Red core: spreads from center outward with dynamic hue feathering based on bass
+            # Very bassy = more deeper reds, less feathering
+            # Less bassy = more oranges, more feathering
             if red_core_size > 0 and dist_from_center < red_core_size:
                 red_blend = max(0.0, 1.0 - (dist_from_center / red_core_size))
-                # Only feather in the last 20% (outer edge)
-                feather_start = red_core_size * 0.8
+                # Dynamic feather zone: high bass = small feather zone (more red), low bass = large feather zone (more orange)
+                feather_start = red_core_size * (0.5 + 0.3 * LEDEffects._prev_bass)  # 0.5-0.8 range
                 if dist_from_center > feather_start:
                     # In feather zone
                     feather_progress = (dist_from_center - feather_start) / (red_core_size - feather_start)
