@@ -179,12 +179,19 @@ class LEDEffects:
             # Distance from center (0 at center, increases toward edges)
             dist_from_center = abs(i - center)
             
-            # Red core: spreads from center outward with hue feathering
-            # Red (0°) at center → Orange (30°) at edges, with brightness falloff
+            # Red core: spreads from center outward with hue feathering only at edges
+            # Red (0°) for most of it → Orange (30°) only in outer 20%, with brightness falloff
             if red_core_size > 0 and dist_from_center < red_core_size:
                 red_blend = max(0.0, 1.0 - (dist_from_center / red_core_size))
-                # Feather from red (0°) to orange (30°) based on distance
-                hue_shift = (dist_from_center / red_core_size) * 30.0
+                # Only feather in the last 20% (outer edge)
+                feather_start = red_core_size * 0.8
+                if dist_from_center > feather_start:
+                    # In feather zone
+                    feather_progress = (dist_from_center - feather_start) / (red_core_size - feather_start)
+                    hue_shift = feather_progress * 30.0  # 0° → 30°
+                else:
+                    # In solid red zone
+                    hue_shift = 0.0
                 red_hue = hue_shift / 360.0
                 red_sat = 1.0
                 red_val = red_brightness * red_blend  # Brightness fades with distance
@@ -196,8 +203,8 @@ class LEDEffects:
                 r_red = g_red = b_red = 0
                 red_blend = 0.0
             
-            # Blue edges: on far left and far right with hue feathering
-            # Blue (240°) at edges → Cyan (180°) blending inward, with brightness falloff
+            # Blue edges: on far left and far right with hue feathering only at inner boundary
+            # Blue (240°) for most of it → Cyan (180°) only in inner 20%, with brightness falloff
             dist_from_left = i
             dist_from_right = total_leds - 1 - i
             is_left_edge = dist_from_left < blue_edge_size
@@ -207,8 +214,15 @@ class LEDEffects:
                 edge_dist = min(dist_from_left if is_left_edge else total_leds, 
                                dist_from_right if is_right_edge else total_leds)
                 blue_blend = max(0.0, 1.0 - (edge_dist / max(blue_edge_size, 1)))
-                # Feather from blue (240°) to cyan (180°) based on distance from edge
-                hue_shift = (edge_dist / max(blue_edge_size, 1)) * 60.0  # 240° → 180°
+                # Only feather in the first 20% from edge (inner edge of blue zone)
+                feather_end = blue_edge_size * 0.2
+                if edge_dist < feather_end:
+                    # In feather zone
+                    feather_progress = edge_dist / feather_end
+                    hue_shift = feather_progress * 60.0  # 240° → 180°
+                else:
+                    # In solid blue zone
+                    hue_shift = 0.0
                 blue_hue = (240.0 - hue_shift) / 360.0
                 blue_sat = 1.0
                 blue_val = blue_brightness * blue_blend  # Brightness fades with distance
