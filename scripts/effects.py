@@ -63,32 +63,33 @@ class LEDEffects:
     
     @staticmethod
     def get_perceptual_brightness_correction(hue_degrees):
-        """Correct brightness so all hues appear equally bright.
+        """Dim non-red hues so red appears as the brightest baseline.
         
-        Blue LEDs are inherently brighter than red at equal intensity.
-        Dim blue slightly to balance perceived brightness across hues.
+        Blue and orange LEDs are inherently brighter than red at equal intensity.
+        Dim them relative to red to make red feel like the dominant color.
         
         Args:
             hue_degrees: 0-360 hue value
             
         Returns:
-            brightness_multiplier: 0.7-1.0 to apply to RGB values
+            brightness_multiplier: 0.45-1.0 to apply to RGB values
         """
         # Normalize hue to 0-1
         h = (hue_degrees % 360.0) / 360.0
         
-        # Subtle correction: make all hues feel equally bright
-        # Red (0°): 1.0x (baseline), Blue (240°): 0.75x (slightly dimmed)
+        # Red is brightest (1.0), dim everything else
+        # Red (0°): 1.0x (baseline), Orange (30°): 0.65x, Blue (240°): 0.45x
         if h < 0.08:  # 0-30°: Red to Orange
-            return 1.0  # No change for red/orange
-        elif h < 0.67:  # 30-240°: Skip this range
-            return 1.0
-        elif h < 0.72:  # 240-260°: Deep Blue zone
-            # Subtle dim for blue (0.75-0.70)
+            # Gradual dim from red to orange
+            return 1.0 - ((h / 0.08) * 0.35)
+        elif h < 0.67:  # 30-240°: Skip this range (shouldn't appear in our spectrum)
+            return 0.65
+        elif h < 0.72:  # 240-260°: Deep Blue zone (our range)
+            # Strong dim for blue (0.45-0.40)
             progress = (h - 0.67) / 0.05
-            return 0.75 - (progress * 0.05)
+            return 0.45 - (progress * 0.05)
         else:
-            return 0.70
+            return 0.40
     
     @staticmethod
     def frequency_spectrum(strips, features):
