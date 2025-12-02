@@ -143,10 +143,10 @@ class LEDEffects:
         r, g, b = colorsys.hsv_to_rgb(LEDEffects._prev_hue / 360.0, 1.0, LEDEffects._prev_brightness)
         core_color = (int(r * 255), int(g * 255), int(b * 255))
         
-        # Edge parameters - treble edges more responsive
-        edge_intensity = LEDEffects._prev_edge ** 1.2  # Less aggressive curve
-        edge_size = int(NUM_LEDS_PER_STRIP * 0.7 * LEDEffects._prev_edge)  # Can expand further
-        feather_size = max(8, edge_size // 3)  # Smooth feathering
+        # Edge parameters - treble edges more responsive (BLUES STRONGER)
+        edge_intensity = LEDEffects._prev_edge ** 1.0  # Linear for more presence
+        edge_size = int(NUM_LEDS_PER_STRIP * 0.85 * LEDEffects._prev_edge)  # Expand more (was 0.7)
+        feather_size = max(6, edge_size // 4)  # Tighter feathering (was //3)
         
         # Aggressive red core: fills center strip and bleeds into outer strips
         # Faster decay but strong presence when active
@@ -194,13 +194,13 @@ class LEDEffects:
             if blue_blend > 0:
                 # Feather blue toward core hue
                 feathered_blue_hue = 240.0 + (blue_feather_factor * (LEDEffects._prev_hue - 240.0))
-                br_f, bg_f, bb_f = colorsys.hsv_to_rgb(feathered_blue_hue / 360.0, 1.0, edge_intensity)
+                br_f, bg_f, bb_f = colorsys.hsv_to_rgb(feathered_blue_hue / 360.0, 1.0, edge_intensity * 1.2)  # Brighter blue
                 er, eg, eb = int(br_f * 255), int(bg_f * 255), int(bb_f * 255)
             
-            final_red_blend = red_blend * (1.0 - blue_blend * 0.6)
-            r = int(cr * 255 * (1 - final_red_blend) + br * 255 * final_red_blend + er * blue_blend * 0.5)
-            g = int(cg * 255 * (1 - final_red_blend) + bg * 255 * final_red_blend + eg * blue_blend * 0.5)
-            b = int(cb * 255 * (1 - final_red_blend) + bb * 255 * final_red_blend + eb * blue_blend * 0.5)
+            final_red_blend = red_blend * (1.0 - blue_blend * 0.7)  # Blue more dominant
+            r = int(cr * 255 * (1 - final_red_blend) + br * 255 * final_red_blend + er * blue_blend * 0.7)  # More blue contribution
+            g = int(cg * 255 * (1 - final_red_blend) + bg * 255 * final_red_blend + eg * blue_blend * 0.7)
+            b = int(cb * 255 * (1 - final_red_blend) + bb * 255 * final_red_blend + eb * blue_blend * 0.7)
             strips[0][i] = (int(max(0, min(255, r))), int(max(0, min(255, g))), int(max(0, min(255, b))))
             
             # Strip 1: bass core from center with feathered gradient AND hue feathering
@@ -246,13 +246,13 @@ class LEDEffects:
                 
                 # Blend colors with hue feathering in blue zones (right side)
                 feathered_blue_hue_right = 240.0 + (blue_feather_factor_right * (LEDEffects._prev_hue - 240.0))
-                br_f_r, bg_f_r, bb_f_r = colorsys.hsv_to_rgb(feathered_blue_hue_right / 360.0, 1.0, edge_intensity)
+                br_f_r, bg_f_r, bb_f_r = colorsys.hsv_to_rgb(feathered_blue_hue_right / 360.0, 1.0, edge_intensity * 1.2)  # Brighter blue
                 er_r, eg_r, eb_r = int(br_f_r * 255), int(bg_f_r * 255), int(bb_f_r * 255)
             
-            final_red_blend_right = red_blend_right * (1.0 - blue_blend_right * 0.6)
-            r = int(cr * 255 * (1 - final_red_blend_right) + br * 255 * final_red_blend_right + er_r * blue_blend_right * 0.5)
-            g = int(cg * 255 * (1 - final_red_blend_right) + bg * 255 * final_red_blend_right + eg_r * blue_blend_right * 0.5)
-            b = int(cb * 255 * (1 - final_red_blend_right) + bb * 255 * final_red_blend_right + eb_r * blue_blend_right * 0.5)
+            final_red_blend_right = red_blend_right * (1.0 - blue_blend_right * 0.7)  # Blue more dominant
+            r = int(cr * 255 * (1 - final_red_blend_right) + br * 255 * final_red_blend_right + er_r * blue_blend_right * 0.7)  # More blue contribution
+            g = int(cg * 255 * (1 - final_red_blend_right) + bg * 255 * final_red_blend_right + eg_r * blue_blend_right * 0.7)
+            b = int(cb * 255 * (1 - final_red_blend_right) + bb * 255 * final_red_blend_right + eb_r * blue_blend_right * 0.7)
             strips[2][i] = (int(max(0, min(255, r))), int(max(0, min(255, g))), int(max(0, min(255, b))))
 
     @staticmethod
