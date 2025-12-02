@@ -5,7 +5,7 @@
 set -e
 
 SSID="${1:-MrPineapple}"
-PASSWORD="$2"
+PASSWORD="${2:-spikyfruit}"
 PRIORITY="${3:-10}"
 
 if [ -z "$PASSWORD" ]; then
