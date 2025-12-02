@@ -27,7 +27,11 @@ echo "Step 3: Enabling SPI interface..."
 sudo raspi-config nonint do_spi 0
 
 echo ""
-echo "Step 4: Installing pixi dependencies..."
+echo "Step 4: Enabling console auto-login..."
+sudo raspi-config nonint do_boot_behaviour B2
+
+echo ""
+echo "Step 5: Installing pixi dependencies..."
 pixi install
 
 echo ""
