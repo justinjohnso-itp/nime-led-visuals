@@ -26,13 +26,21 @@ else:
 
 def initialize_strips():
     """Create NeoPixel strip with subsets for daisy-chained segments"""
+    import sys
+    print(f"  Python: {sys.executable}")
+    print(f"  neopixel module: {neopixel.__file__}")
+    
+    total_leds = NUM_LEDS_PER_STRIP * NUM_STRIPS
+    print(f"  Total LEDs: {total_leds} ({NUM_STRIPS} strips x {NUM_LEDS_PER_STRIP})")
+    
     # Single NeoPixel on GPIO 18 for all daisy-chained LEDs
     pixels = neopixel.NeoPixel(
         board.D18,
-        NUM_LEDS_PER_STRIP * NUM_STRIPS,
+        total_leds,
         brightness=LED_BRIGHTNESS,
         auto_write=False
     )
+    print(f"  len(pixels) = {len(pixels)}")
     
     # Create PixelSubset for each daisy-chained strip segment
     strips = [
@@ -40,6 +48,7 @@ def initialize_strips():
         PixelSubset(pixels, NUM_LEDS_PER_STRIP, 2 * NUM_LEDS_PER_STRIP),
         PixelSubset(pixels, 2 * NUM_LEDS_PER_STRIP, 3 * NUM_LEDS_PER_STRIP)
     ]
+    print(f"  Strip lengths: {len(strips[0])}, {len(strips[1])}, {len(strips[2])}")
     
     return pixels, strips
 
@@ -92,7 +101,7 @@ def led_thread_func(pixels, strips, shared_features, stop_event):
             
             frame_count += 1
             if frame_count == 1:
-                print("💡 First LED frame rendered")
+                print(f"💡 First LED frame rendered (total LEDs: {len(pixels)})")
             
             # LED updates at 60 FPS (16.67ms) - balance between responsiveness and CPU load
             time.sleep(0.01667)
