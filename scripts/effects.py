@@ -173,26 +173,59 @@ class LEDEffects:
         red_core_size = int(total_leds * 0.3 * LEDEffects._prev_bass)  # 0-30% from center outward
         blue_edge_size = int(total_leds * 0.2 * LEDEffects._prev_edge)  # 0-20% on each end
         
-        # Build full 432-LED array
+        # Build full 432-LED array with feathering
         leds = []
         for i in range(total_leds):
             # Distance from center (0 at center, increases toward edges)
             dist_from_center = abs(i - center)
             
-            # Red core: spreads from center outward
-            red_blend = max(0.0, 1.0 - (dist_from_center / max(red_core_size, 1))) if red_core_size > 0 else 0.0
+            # Red core: spreads from center outward with hue feathering
+            # Red (0°) at center → Orange (30°) at edges, with brightness falloff
+            if red_core_size > 0 and dist_from_center < red_core_size:
+                red_blend = max(0.0, 1.0 - (dist_from_center / red_core_size))
+                # Feather from red (0°) to orange (30°) based on distance
+                hue_shift = (dist_from_center / red_core_size) * 30.0
+                red_hue = hue_shift / 360.0
+                red_sat = 1.0
+                red_val = red_brightness * red_blend  # Brightness fades with distance
+                r_f, g_f, b_f = colorsys.hsv_to_rgb(red_hue, red_sat, red_val)
+                r_red = int(r_f * 255)
+                g_red = int(g_f * 255)
+                b_red = int(b_f * 255)
+            else:
+                r_red = g_red = b_red = 0
+                red_blend = 0.0
             
-            # Blue edges: on far left and far right
+            # Blue edges: on far left and far right with hue feathering
+            # Blue (240°) at edges → Cyan (180°) blending inward, with brightness falloff
             dist_from_left = i
             dist_from_right = total_leds - 1 - i
-            blue_blend = 1.0 if (dist_from_left < blue_edge_size or dist_from_right < blue_edge_size) else 0.0
+            is_left_edge = dist_from_left < blue_edge_size
+            is_right_edge = dist_from_right < blue_edge_size
+            
+            if is_left_edge or is_right_edge:
+                edge_dist = min(dist_from_left if is_left_edge else total_leds, 
+                               dist_from_right if is_right_edge else total_leds)
+                blue_blend = max(0.0, 1.0 - (edge_dist / max(blue_edge_size, 1)))
+                # Feather from blue (240°) to cyan (180°) based on distance from edge
+                hue_shift = (edge_dist / max(blue_edge_size, 1)) * 60.0  # 240° → 180°
+                blue_hue = (240.0 - hue_shift) / 360.0
+                blue_sat = 1.0
+                blue_val = blue_brightness * blue_blend  # Brightness fades with distance
+                r_f, g_f, b_f = colorsys.hsv_to_rgb(blue_hue, blue_sat, blue_val)
+                r_blue = int(r_f * 255)
+                g_blue = int(g_f * 255)
+                b_blue = int(b_f * 255)
+            else:
+                r_blue = g_blue = b_blue = 0
+                blue_blend = 0.0
             
             # Mix red and blue
-            r = int(red_brightness * 255 * red_blend + blue_brightness * 0 * blue_blend)
-            g = int(red_brightness * 0 * red_blend + blue_brightness * 0 * blue_blend)
-            b = int(red_brightness * 0 * red_blend + blue_brightness * 255 * blue_blend)
+            r = int(max(0, min(255, r_red + r_blue)))
+            g = int(max(0, min(255, g_red + g_blue)))
+            b = int(max(0, min(255, b_red + b_blue)))
             
-            leds.append((max(0, min(255, r)), max(0, min(255, g)), max(0, min(255, b))))
+            leds.append((r, g, b))
         
         # Write to all three strips
         for strip_idx, strip in enumerate(strips):
