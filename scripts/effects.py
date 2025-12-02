@@ -143,27 +143,21 @@ class LEDEffects:
         else:
             LEDEffects._prev_brightness += (target_brightness - LEDEffects._prev_brightness) * decay
         
-        # Edge smoothing - FASTER for treble (more dynamic)
+        # Edge smoothing - treble with slow decay for trailing effect
         if target_edge > LEDEffects._prev_edge:
-            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.95  # Very quick rise
+            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.95  # Quick rise
         else:
-            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.08  # Fast decay (was 0.5)
+            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.02  # Slow decay for trail
         
-        # Bass smoothing - responsive but with faster release
+        # Bass smoothing - slow decay for sustained presence
         if bass_energy > LEDEffects._prev_bass:
             LEDEffects._prev_bass += (bass_energy - LEDEffects._prev_bass) * 0.95
         else:
-            LEDEffects._prev_bass += (bass_energy - LEDEffects._prev_bass) * 0.1  # Very fast decay for punch
+            LEDEffects._prev_bass += (bass_energy - LEDEffects._prev_bass) * 0.01  # Very slow decay
         
         # Simple: just red core and blue edges, both dynamic
         red_brightness = LEDEffects._prev_bass * LEDEffects._prev_brightness * LED_BRIGHTNESS  # Red follows bass
         blue_brightness = LEDEffects._prev_edge * LED_BRIGHTNESS  # Blue follows treble
-        
-        # Red core RGB
-        red_r, red_g, red_b = int(red_brightness * 255), 0, 0
-        
-        # Blue edge RGB
-        blue_r, blue_g, blue_b = 0, 0, int(blue_brightness * 255)
         
         # If everything is dark, just black
         if red_brightness < 0.005 and blue_brightness < 0.005:
@@ -171,42 +165,40 @@ class LEDEffects:
                 strip.fill((0, 0, 0))
             return
         
-        # Red core size and blue edge size
-        red_core_size = int(NUM_LEDS_PER_STRIP * 0.5 * LEDEffects._prev_bass)  # 0-50% from bass
-        blue_edge_size = int(NUM_LEDS_PER_STRIP * 0.4 * LEDEffects._prev_edge)  # 0-40% from treble
+        # Treat all 432 LEDs as one continuous strip
+        total_leds = NUM_LEDS_PER_STRIP * NUM_STRIPS
+        center = total_leds // 2
         
-        # Fill strips: red core + blue edges
-        center = NUM_LEDS_PER_STRIP // 2
+        # Red core size and blue edge size (bigger red core now)
+        red_core_size = int(total_leds * 0.3 * LEDEffects._prev_bass)  # 0-30% from center outward
+        blue_edge_size = int(total_leds * 0.2 * LEDEffects._prev_edge)  # 0-20% on each end
         
-        for i in range(NUM_LEDS_PER_STRIP):
-            # Strip 0: Red core from left, blue edge on far left
-            dist_from_left = i
-            red_blend = min(1.0, (dist_from_left + 1) / max(red_core_size, 1)) if red_core_size > 0 and dist_from_left < red_core_size else 0.0
-            blue_blend = 1.0 if dist_from_left < blue_edge_size else 0.0
-            
-            r = int(red_r * red_blend + blue_r * blue_blend)
-            g = int(red_g * red_blend + blue_g * blue_blend)
-            b = int(red_b * red_blend + blue_b * blue_blend)
-            strips[0][i] = (max(0, min(255, r)), max(0, min(255, g)), max(0, min(255, b)))
-            
-            # Strip 1: Red core from center (both directions)
+        # Build full 432-LED array
+        leds = []
+        for i in range(total_leds):
+            # Distance from center (0 at center, increases toward edges)
             dist_from_center = abs(i - center)
-            red_blend = min(1.0, (red_core_size - dist_from_center) / max(red_core_size, 1)) if dist_from_center < red_core_size else 0.0
             
-            r = int(red_r * red_blend)
-            g = int(red_g * red_blend)
-            b = int(red_b * red_blend)
-            strips[1][i] = (max(0, min(255, r)), max(0, min(255, g)), max(0, min(255, b)))
+            # Red core: spreads from center outward
+            red_blend = max(0.0, 1.0 - (dist_from_center / max(red_core_size, 1))) if red_core_size > 0 else 0.0
             
-            # Strip 2: Red core from right, blue edge on far right
-            dist_from_right = NUM_LEDS_PER_STRIP - 1 - i
-            red_blend = min(1.0, (dist_from_right + 1) / max(red_core_size, 1)) if red_core_size > 0 and dist_from_right < red_core_size else 0.0
-            blue_blend = 1.0 if dist_from_right < blue_edge_size else 0.0
+            # Blue edges: on far left and far right
+            dist_from_left = i
+            dist_from_right = total_leds - 1 - i
+            blue_blend = 1.0 if (dist_from_left < blue_edge_size or dist_from_right < blue_edge_size) else 0.0
             
-            r = int(red_r * red_blend + blue_r * blue_blend)
-            g = int(red_g * red_blend + blue_g * blue_blend)
-            b = int(red_b * red_blend + blue_b * blue_blend)
-            strips[2][i] = (max(0, min(255, r)), max(0, min(255, g)), max(0, min(255, b)))
+            # Mix red and blue
+            r = int(red_brightness * 255 * red_blend + blue_brightness * 0 * blue_blend)
+            g = int(red_brightness * 0 * red_blend + blue_brightness * 0 * blue_blend)
+            b = int(red_brightness * 0 * red_blend + blue_brightness * 255 * blue_blend)
+            
+            leds.append((max(0, min(255, r)), max(0, min(255, g)), max(0, min(255, b))))
+        
+        # Write to all three strips
+        for strip_idx, strip in enumerate(strips):
+            for led_idx in range(NUM_LEDS_PER_STRIP):
+                absolute_idx = strip_idx * NUM_LEDS_PER_STRIP + led_idx
+                strip[led_idx] = leds[absolute_idx]
 
     @staticmethod
     def pulse_effect(strip, volume, color=(255, 255, 255)):
