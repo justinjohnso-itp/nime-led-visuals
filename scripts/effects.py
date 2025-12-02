@@ -141,11 +141,13 @@ class LEDEffects:
         edge_size = int(NUM_LEDS_PER_STRIP * 0.6 * LEDEffects._prev_edge)
         feather_size = max(10, edge_size // 2)  # Gradient zone (at least 10 LEDs)
         
-        # Bass core for center strip with subtle feathering (sharper edges)
-        bass_core_size = int(NUM_LEDS_PER_STRIP * 0.7 * (bass_energy / (bass_energy + 0.3)))
-        bass_feather_size = max(5, bass_core_size // 4)  # Smaller gradient zone for sharper edges
+        # Aggressive red core: fills center strip and bleeds into outer strips
+        # At max bass energy, fills entire strip; at zero, contracts to center
+        bass_core_size = int(NUM_LEDS_PER_STRIP * (0.85 + 0.15 * (bass_energy / (bass_energy + 0.2))))
+        bass_feather_size = max(8, bass_core_size // 3)  # Feather zone for smooth bleed
         bass_brightness = LEDEffects._prev_brightness
-        bass_intensity = min(1.0, bass_energy * 2)
+        # Red intensity: full strength when bass present, fades to zero when silent
+        bass_intensity = min(1.0, bass_energy * 3.0)  # More aggressive red bleed
         
         center = NUM_LEDS_PER_STRIP // 2
         
@@ -160,25 +162,29 @@ class LEDEffects:
                 strip.fill((0, 0, 0))
             return
         
-        # Fill strips with feathered edge effects
+        # Fill strips with red core dominating, blue edges on outer boundaries only
         for i in range(NUM_LEDS_PER_STRIP):
-            # Strip 0: edge at low indices (left side) with gradient
-            dist_from_edge = i  # 0 at left edge
-            if dist_from_edge < edge_size:
-                if dist_from_edge < edge_size - feather_size:
-                    # Solid edge zone
-                    blend = 1.0
+            # Strip 0: Red core from LEFT edge (opposite side from blue edges)
+            # Red bleeds in from the left, blue edge only on right edge (far left indices)
+            dist_from_left = i  # 0 at left edge
+            red_blend = min(1.0, (dist_from_left + 1) / bass_core_size) * bass_intensity if dist_from_left < bass_core_size else 1.0
+            
+            # Blue edge only at the far left indices (opposite of strip 2)
+            dist_from_outer_left = i  # Distance from index 0
+            blue_blend = 0.0
+            if dist_from_outer_left < edge_size:
+                if dist_from_outer_left < edge_size - feather_size:
+                    blue_blend = 1.0
                 else:
-                    # Feather zone - gradient blend
-                    blend = 1.0 - ((dist_from_edge - (edge_size - feather_size)) / feather_size)
-                blend = blend * edge_intensity
-                # Blend blue over core
-                r = int(cr * 255 * (1 - blend) + er * 255 * blend)
-                g = int(cg * 255 * (1 - blend) + eg * 255 * blend)
-                b = int(cb * 255 * (1 - blend) + eb * 255 * blend)
-                strips[0][i] = (r, g, b)
-            else:
-                strips[0][i] = core_color
+                    blue_blend = 1.0 - ((dist_from_outer_left - (edge_size - feather_size)) / feather_size)
+                blue_blend = blue_blend * edge_intensity
+            
+            # Blend: red core takes priority, blue edges appear on outer boundary
+            final_red_blend = red_blend * (1.0 - blue_blend * 0.6)  # Blue slightly reduces red
+            r = int(cr * 255 * (1 - final_red_blend) + br * 255 * final_red_blend + er * 255 * blue_blend * 0.3)
+            g = int(cg * 255 * (1 - final_red_blend) + bg * 255 * final_red_blend + eg * 255 * blue_blend * 0.3)
+            b = int(cb * 255 * (1 - final_red_blend) + bb * 255 * final_red_blend + eb * 255 * blue_blend * 0.3)
+            strips[0][i] = (int(max(0, min(255, r))), int(max(0, min(255, g))), int(max(0, min(255, b))))
             
             # Strip 1: bass core from center with feathered gradient
             dist_from_center = abs(i - center)
@@ -198,20 +204,27 @@ class LEDEffects:
             else:
                 strips[1][i] = core_color
             
-            # Strip 2: edge at high indices (right side) with gradient
-            dist_from_edge = NUM_LEDS_PER_STRIP - 1 - i  # 0 at right edge
-            if dist_from_edge < edge_size:
-                if dist_from_edge < edge_size - feather_size:
-                    blend = 1.0
+            # Strip 2: Red core from RIGHT edge (opposite side from blue edges)
+            # Red bleeds in from the right, blue edge only on far right indices
+            dist_from_right = NUM_LEDS_PER_STRIP - 1 - i  # 0 at right edge
+            red_blend_right = min(1.0, (dist_from_right + 1) / bass_core_size) * bass_intensity if dist_from_right < bass_core_size else 1.0
+            
+            # Blue edge only at the far right indices (opposite of strip 0)
+            dist_from_outer_right = NUM_LEDS_PER_STRIP - 1 - i  # Distance from right edge
+            blue_blend_right = 0.0
+            if dist_from_outer_right < edge_size:
+                if dist_from_outer_right < edge_size - feather_size:
+                    blue_blend_right = 1.0
                 else:
-                    blend = 1.0 - ((dist_from_edge - (edge_size - feather_size)) / feather_size)
-                blend = blend * edge_intensity
-                r = int(cr * 255 * (1 - blend) + er * 255 * blend)
-                g = int(cg * 255 * (1 - blend) + eg * 255 * blend)
-                b = int(cb * 255 * (1 - blend) + eb * 255 * blend)
-                strips[2][i] = (r, g, b)
-            else:
-                strips[2][i] = core_color
+                    blue_blend_right = 1.0 - ((dist_from_outer_right - (edge_size - feather_size)) / feather_size)
+                blue_blend_right = blue_blend_right * edge_intensity
+            
+            # Blend: red core takes priority, blue edges appear on outer boundary
+            final_red_blend_right = red_blend_right * (1.0 - blue_blend_right * 0.6)
+            r = int(cr * 255 * (1 - final_red_blend_right) + br * 255 * final_red_blend_right + er * 255 * blue_blend_right * 0.3)
+            g = int(cg * 255 * (1 - final_red_blend_right) + bg * 255 * final_red_blend_right + eg * 255 * blue_blend_right * 0.3)
+            b = int(cb * 255 * (1 - final_red_blend_right) + bb * 255 * final_red_blend_right + eb * 255 * blue_blend_right * 0.3)
+            strips[2][i] = (int(max(0, min(255, r))), int(max(0, min(255, g))), int(max(0, min(255, b))))
 
     @staticmethod
     def pulse_effect(strip, volume, color=(255, 255, 255)):
