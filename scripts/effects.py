@@ -143,11 +143,11 @@ class LEDEffects:
         else:
             LEDEffects._prev_brightness += (target_brightness - LEDEffects._prev_brightness) * decay
         
-        # Edge smoothing - instant rise, very fast additive decay
+        # Edge smoothing - instant rise, snappy decay
         if target_edge > LEDEffects._prev_edge:
             LEDEffects._prev_edge = target_edge  # Instant
         else:
-            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.05  # Very fast decay
+            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.25  # Fast decay
         
         # Bass smoothing - instant rise, very fast additive decay
         if bass_energy > LEDEffects._prev_bass:
