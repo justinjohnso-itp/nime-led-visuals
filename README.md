@@ -96,10 +96,6 @@ All code is self-documented with docstrings and inline comments explaining the a
 - 5V power supply (30A recommended)
 - USB audio interface
 
-## Code Quality
+## Project Context
 
-- ✓ 9.2/10 (Oracle + Librarian audit)
-- ✓ 100% design compliance
-- ✓ Production ready
-
-See `AGENTS.md` for project context and decisions.
+See `AGENTS.md` for development decisions and cross-platform setup details.
