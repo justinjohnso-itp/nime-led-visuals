@@ -2,11 +2,13 @@
 
 Audio-reactive LED visualization. Shows dominant audio frequencies as a color gradient (red=bass, blue=treble) across 432 LEDs (3 strips × 144 LEDs each).
 
-## Quick Start (Raspberry Pi Desktop/Lite)
+## Quick Start (Raspberry Pi)
 
 ### Automated Setup (Recommended)
 
-On a fresh Raspberry Pi OS (Desktop or Lite), run:
+**Use Raspberry Pi OS Desktop** (not Lite - missing audio/driver packages).
+
+On a fresh Raspberry Pi OS Desktop install, run:
 
 ```bash
 cd ~/Code/nime-led-visuals
