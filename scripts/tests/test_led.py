@@ -15,7 +15,8 @@ print(f"neopixel module: {neopixel.__file__}")
 print(f"Total LEDs: {TOTAL_LEDS} ({NUM_STRIPS} strips x {NUM_LEDS_PER_STRIP})")
 
 print(f"\nInitializing NeoPixel on GPIO 18 with {TOTAL_LEDS} LEDs...")
-pixels = neopixel.NeoPixel(board.D18, TOTAL_LEDS, brightness=LED_BRIGHTNESS, auto_write=False)
+# Set brightness to 1.0 (max) - all brightness control is done in effects.py
+pixels = neopixel.NeoPixel(board.D18, TOTAL_LEDS, brightness=1.0, auto_write=False)
 print(f"✓ NeoPixel initialized, len(pixels) = {len(pixels)}")
 
 print("\nTest 1: Fill all LEDs red...")

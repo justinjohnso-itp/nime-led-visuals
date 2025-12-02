@@ -3,7 +3,7 @@
 # LED Configuration
 NUM_LEDS_PER_STRIP = 144
 NUM_STRIPS = 3
-LED_BRIGHTNESS = 0.4
+LED_BRIGHTNESS = 0.4  # Applied in effects.py (perceptual correction) - NOT the hardware brightness parameter
 
 # GPIO Pin (BCM numbering)
 GPIO_PIN = 18  # All daisy-chained strips on GPIO 18

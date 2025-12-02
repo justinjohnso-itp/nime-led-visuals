@@ -34,10 +34,12 @@ def initialize_strips():
     print(f"  Total LEDs: {total_leds} ({NUM_STRIPS} strips x {NUM_LEDS_PER_STRIP})")
     
     # Single NeoPixel on GPIO 18 for all daisy-chained LEDs
+    # Set hardware brightness to 1.0 (max) - all brightness control is done in effects.py
+    # via the LED_BRIGHTNESS config and perceptual correction in get_perceptual_brightness_correction()
     pixels = neopixel.NeoPixel(
         board.D18,
         total_leds,
-        brightness=LED_BRIGHTNESS,
+        brightness=1.0,
         auto_write=False
     )
     print(f"  len(pixels) = {len(pixels)}")
