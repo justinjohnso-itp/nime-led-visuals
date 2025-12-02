@@ -40,26 +40,25 @@ class LEDEffects:
     
     @staticmethod
     def get_band_hue(band_index):
-        """Map band index 0-31 to smooth hue gradient (0-240°).
+        """Map band index 0-31 to smooth hue gradient emphasizing reds and blues.
         
-        Red (bass) → Yellow (low-mid) → Cyan (high-mid) → Blue (treble)
+        Red/Orange (bass) → Blue/Cyan (treble), skipping muddy yellow/green midtones.
         
         Args:
             band_index: 0-31 spectrum band index
             
         Returns:
-            hue: 0-240 degrees
+            hue: 0-360 degrees
         """
-        # Smooth S-curve mapping across the spectrum
-        if band_index < 11:
-            # Bands 0-10: Red (0°) to Yellow (60°) - bass warmth
-            return (band_index / 11.0) * 60.0
-        elif band_index < 22:
-            # Bands 11-21: Yellow (60°) to Cyan (180°) - mids brightness
-            return 60.0 + ((band_index - 11) / 11.0) * 120.0
+        # Emphasize warm reds/oranges and cool blues, skip yellow/green
+        if band_index < 16:
+            # Bands 0-15: Red (0°) to Orange (30°) - bass/mid warmth
+            # 16 bands spread over only 30° for rich reds
+            return (band_index / 16.0) * 30.0
         else:
-            # Bands 22-31: Cyan (180°) to Blue (240°) - treble cool
-            return 180.0 + ((band_index - 22) / 10.0) * 60.0
+            # Bands 16-31: Blue (240°) to Cyan (210°) - high-mid/treble cool
+            # 16 bands spread over 30° of blue spectrum
+            return 240.0 - ((band_index - 16) / 16.0) * 30.0
     
     @staticmethod
     def frequency_spectrum(strips, features):

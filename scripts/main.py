@@ -201,12 +201,11 @@ def main(audio_source='live', filepath=None):
                 # 32-band spectrum as single line with height chars
                 output = ""
                 for i, val in enumerate(spectrum):
-                    if i < 8:
-                        color = RED
-                    elif i < 16:
-                        color = ORANGE
+                    # Match new color scheme: reds (0-15), blues (16-31)
+                    if i < 16:
+                        color = RED  # Bands 0-15: Red/Orange warmth
                     else:
-                        color = BLUE
+                        color = BLUE  # Bands 16-31: Blue/Cyan cool
                     
                     # Highlight dominant band
                     if i == dominant_band:
