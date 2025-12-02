@@ -80,6 +80,8 @@ def led_thread_func(pixels, strips, shared_features, stop_event):
         shared_features: dict with latest audio features
         stop_event: threading.Event to signal shutdown
     """
+    print("💡 LED thread started")
+    frame_count = 0
     try:
         while not stop_event.is_set():
             # Use latest features from audio thread
@@ -88,10 +90,16 @@ def led_thread_func(pixels, strips, shared_features, stop_event):
             # Show all changes at once (daisy-chained)
             pixels.show()
             
+            frame_count += 1
+            if frame_count == 1:
+                print("💡 First LED frame rendered")
+            
             # LED updates at 60 FPS (16.67ms) - balance between responsiveness and CPU load
             time.sleep(0.01667)
     except Exception as e:
         print(f"\n❌ LED thread error: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         # Cleanup LEDs
         pixels.fill((0, 0, 0))
