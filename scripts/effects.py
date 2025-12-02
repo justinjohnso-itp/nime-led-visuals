@@ -143,17 +143,17 @@ class LEDEffects:
         else:
             LEDEffects._prev_brightness += (target_brightness - LEDEffects._prev_brightness) * decay
         
-        # Edge smoothing - treble with slow decay for trailing effect
+        # Edge smoothing - fast response, snappy decay
         if target_edge > LEDEffects._prev_edge:
             LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.95  # Quick rise
         else:
-            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.02  # Slow decay for trail
+            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.3  # Fast decay for responsiveness
         
-        # Bass smoothing - slow decay for sustained presence
+        # Bass smoothing - fast response, snappy decay
         if bass_energy > LEDEffects._prev_bass:
             LEDEffects._prev_bass += (bass_energy - LEDEffects._prev_bass) * 0.95
         else:
-            LEDEffects._prev_bass += (bass_energy - LEDEffects._prev_bass) * 0.01  # Very slow decay
+            LEDEffects._prev_bass += (bass_energy - LEDEffects._prev_bass) * 0.2  # Fast decay for punch
         
         # Simple: just red core and blue edges, both dynamic
         red_brightness = LEDEffects._prev_bass * LEDEffects._prev_brightness * LED_BRIGHTNESS  # Red follows bass
