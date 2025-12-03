@@ -9,7 +9,7 @@ LED_BRIGHTNESS = 0.4  # Applied in effects.py (perceptual correction) - NOT the 
 GPIO_PIN = 18  # All daisy-chained strips on GPIO 18
 
 # Audio Configuration
-SAMPLE_RATE = 44100
+SAMPLE_RATE = 48000
 CHUNK_SIZE = 1024
 AUDIO_OUTPUT_DEVICE = "hw:1,0"  # Headphones output (Raspberry Pi), survives reboots
 # AUDIO_INPUT_DEVICE can be:
