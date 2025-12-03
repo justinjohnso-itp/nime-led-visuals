@@ -16,7 +16,7 @@ AUDIO_OUTPUT_DEVICE = "hw:1,0"  # Headphones output (Raspberry Pi), survives reb
 #   - int: explicit device index
 #   - str: case-insensitive substring to match device name (e.g. "scarlett")
 #   - None: auto-select first suitable input device
-AUDIO_INPUT_DEVICE = "scarlett"  # Focusrite 2i2 USB by name pattern
+AUDIO_INPUT_DEVICE = "AB13X"  # AB13X USB Audio by name pattern
 
 # Frequency Bands (Hz) - 5 legacy bands for compatibility
 FREQ_BANDS = [
