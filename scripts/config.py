@@ -3,7 +3,7 @@
 # LED Configuration
 NUM_LEDS_PER_STRIP = 144
 NUM_STRIPS = 3
-LED_BRIGHTNESS = 0.4  # Applied in effects.py (perceptual correction) - NOT the hardware brightness parameter
+LED_BRIGHTNESS = 0.85  # Applied in effects.py (perceptual correction) - NOT the hardware brightness parameter
 
 # GPIO Pin (BCM numbering)
 GPIO_PIN = 18  # All daisy-chained strips on GPIO 18
@@ -74,7 +74,7 @@ ATTACK_TIME = 0.02           # How fast brightness jumps to a new peak (20ms = 1
 DECAY_TIME = 0.15            # How fast brightness falls back down (150ms = smooth falloff)
 
 # Noise Gate (silence if below this threshold)
-NOISE_GATE_THRESHOLD = 0.05   # Mute signals quieter than 5% RMS
+NOISE_GATE_THRESHOLD = 0.01   # Mute signals quieter than 1% RMS (lowered to catch quieter notes)
 
 # Dominant Frequency Visualization Parameters
 HUE_RANGE = 240              # Red (0°) to Blue (240°) covers bass to treble

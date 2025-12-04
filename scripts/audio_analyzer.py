@@ -15,6 +15,7 @@ from config import (
     FREQ_BANDS,
     NUM_SPECTRUM_BANDS,
     SPECTRUM_FREQS,
+    BRIGHTNESS_EXPONENT,
 )
 
 
@@ -55,15 +56,21 @@ class AudioAnalyzer:
             self.band_bins[name] = idx if idx.size > 0 else None
 
         # Pre-compute 32-band bin indices using the larger spectrum FFT
+        # Ensure every band has at least one FFT bin (no dead bands)
         self.spectrum_bins = []
         for i in range(NUM_SPECTRUM_BANDS):
             low_f = SPECTRUM_FREQS[i]
             high_f = SPECTRUM_FREQS[i + 1]
             idx = np.where((self.spectrum_freqs >= low_f) & (self.spectrum_freqs < high_f))[0]
-            self.spectrum_bins.append(idx if idx.size > 0 else None)
+            if idx.size == 0:
+                # Fallback: pick the closest FFT bin to the band center
+                center_f = 0.5 * (low_f + high_f)
+                closest = np.argmin(np.abs(self.spectrum_freqs - center_f))
+                idx = np.array([closest])
+            self.spectrum_bins.append(idx)
         
         # Running max decay rate for 32-band spectrum (balance responsiveness with peak holding)
-        self.spectrum_decay_rate = 0.95  # Fast decay for responsiveness, slow enough to hold peaks
+        self.spectrum_decay_rate = 0.80  # Faster decay so sustained notes normalize higher (was 0.95)
         
         # A-weighting curve for perceptual loudness (approximate)
         # Makes the spectrum reflect what's actually audible
@@ -265,6 +272,12 @@ class AudioAnalyzer:
                 spectrum_norm[i] = 0.0
         
         spectrum_norm = np.clip(spectrum_norm, 0.0, 1.0)
+        
+        # Apply brightness gamma compression to lift mid-level values
+        # This makes sustained notes brighter without blowing out transients
+        # gamma < 1 lifts values: 0.2 → 0.34, 0.4 → 0.54
+        gamma = 1.0 / BRIGHTNESS_EXPONENT  # e.g. 1/1.5 = 0.67
+        spectrum_norm = np.power(spectrum_norm, gamma)
 
         # Smooth with previous frame (reduces flickering)
         attack = 0.6
