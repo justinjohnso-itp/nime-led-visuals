@@ -57,9 +57,9 @@ class LEDEffects:
             # 16 bands spread over only 30° for rich reds
             return (band_index / 16.0) * 30.0
         else:
-            # Bands 16-31: Blue (240°) to Cyan (210°) - high-mid/treble cool
-            # 16 bands spread over 30° of blue spectrum
-            return 240.0 - ((band_index - 16) / 16.0) * 30.0
+            # Bands 16-31: Cyan (180°) to Blue (240°) - high-mid/treble cool
+            # 16 bands spread over 60° of blue spectrum (cyan to deep blue)
+            return 180.0 + ((band_index - 16) / 16.0) * 60.0
     
     @staticmethod
     def get_perceptual_brightness_correction(hue_degrees):
@@ -142,23 +142,38 @@ class LEDEffects:
             led_count = int((log_width / total_log_width) * leds_per_side)
             band_led_counts.append(max(1, led_count))  # At least 1 LED per band
         
-        # Build cumulative LED positions for each band
-        band_led_start = [0]
-        for count in band_led_counts[:-1]:
-            band_led_start.append(band_led_start[-1] + count)
+        # Adjust rounding: add leftover LEDs to bands with largest fractional parts
+        total_allocated = sum(band_led_counts)
+        leftover = leds_per_side - total_allocated
+        if leftover > 0:
+            # Find bands with largest fractional parts (most undercounted)
+            fractions = [(log_freq_widths[i] / total_log_width) * leds_per_side - band_led_counts[i] 
+                        for i in range(32)]
+            for _ in range(leftover):
+                idx = np.argmax(fractions)
+                band_led_counts[idx] += 1
+                fractions[idx] = -1.0  # Mark as used
+        
+        # Build mapping of LED position to band index
+        # Position 0 at center = band 0, expanding outward
+        position_to_band = [0] * leds_per_side
+        current_pos = 0
+        for band_idx, led_count in enumerate(band_led_counts):
+            for _ in range(led_count):
+                if current_pos < leds_per_side:
+                    position_to_band[current_pos] = band_idx
+                    current_pos += 1
         
         # Build full 432-LED array: mirrored spectrum from center outward
         leds = []
         for i in range(total_leds):
             dist_from_center = abs(i - center)
             
-            # Find which band this LED belongs to based on distance from center
-            band_idx = 0
-            for idx, start_pos in enumerate(band_led_start):
-                if dist_from_center < start_pos + band_led_counts[idx]:
-                    band_idx = idx
-                    break
-            band_idx = min(31, band_idx)
+            # Map distance to band index using the lookup table
+            if dist_from_center < leds_per_side:
+                band_idx = position_to_band[dist_from_center]
+            else:
+                band_idx = 31  # Shouldn't happen, but safety fallback
             
             # Energy in this band
             band_energy = float(spectrum[band_idx])

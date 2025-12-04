@@ -62,6 +62,9 @@ class AudioAnalyzer:
             idx = np.where((self.spectrum_freqs >= low_f) & (self.spectrum_freqs < high_f))[0]
             self.spectrum_bins.append(idx if idx.size > 0 else None)
         
+        # Running max decay rate for 32-band spectrum (slower than legacy bands)
+        self.spectrum_decay_rate = 0.92  # Slower decay for sustained notes
+        
         # A-weighting curve for perceptual loudness (approximate)
         # Makes the spectrum reflect what's actually audible
         self.a_weight = self._compute_a_weight(self.spectrum_freqs)
@@ -169,11 +172,21 @@ class AudioAnalyzer:
             dominant_freq = 0.0
             tonalness = 0.0
 
-        # Update running max with decay
-        self.spectrum_max = np.maximum(spectrum_bands, self.spectrum_max * self.decay_rate)
+        # Update running max with decay (slower for 32-band spectrum to capture sustained notes)
+        self.spectrum_max = np.maximum(spectrum_bands, self.spectrum_max * self.spectrum_decay_rate)
 
-        # Normalize
-        spectrum_norm = spectrum_bands / np.maximum(self.spectrum_max, 0.01)
+        # Normalize: divide by running max, but don't let quiet bands inflate
+        # Use a noise floor: bands below 2% of global max stay quiet
+        global_max = float(np.max(self.spectrum_max))
+        noise_floor = global_max * 0.02
+        
+        spectrum_norm = np.zeros(NUM_SPECTRUM_BANDS)
+        for i in range(NUM_SPECTRUM_BANDS):
+            if spectrum_bands[i] > noise_floor:
+                spectrum_norm[i] = spectrum_bands[i] / np.maximum(self.spectrum_max[i], 0.01)
+            else:
+                spectrum_norm[i] = 0.0
+        
         spectrum_norm = np.clip(spectrum_norm, 0.0, 1.0)
 
         # Smooth with previous frame (reduces flickering)
