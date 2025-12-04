@@ -165,8 +165,9 @@ class AudioAnalyzer:
         # Boost strongest at band 0, fade out by band 15
         bass_boost = np.ones(NUM_SPECTRUM_BANDS)
         for i in range(16):
-            # Linear ramp from 3.0x boost (band 0) to 1.0x (band 15)
-            bass_boost[i] = 3.0 - (i / 16.0) * 2.0
+            # Very aggressive ramp from 15.0x boost (band 0) to 1.0x (band 15)
+            # Band 0 needs massive boost since FFT struggles with very low frequencies
+            bass_boost[i] = 15.0 - (i / 16.0) * 14.0
         spectrum_bands = spectrum_bands * bass_boost
         
         # Harmonic suppression: suppress overtones relative to the detected fundamental
@@ -177,20 +178,30 @@ class AudioAnalyzer:
         harmonic_suppression = np.ones(NUM_SPECTRUM_BANDS)
         harmonic_ratios = [2.0, 3.0, 4.0, 5.0]  # 2nd, 3rd, 4th, 5th harmonics
         
+        # Never suppress band 0 (lowest bass)
+        harmonic_suppression[0] = 1.0
+        
         for harmonic_ratio in harmonic_ratios:
             harmonic_band = int(fundamental_band * harmonic_ratio)
-            if harmonic_band < NUM_SPECTRUM_BANDS:
+            if harmonic_band < NUM_SPECTRUM_BANDS and harmonic_band > 0:  # Skip band 0
                 # Suppress this harmonic band and its neighbors (±1 band width)
                 suppression_width = max(1, fundamental_band // 4)  # Band width depends on fundamental position
                 for offset in range(-suppression_width, suppression_width + 1):
                     band_idx = harmonic_band + offset
-                    if 0 <= band_idx < NUM_SPECTRUM_BANDS:
+                    if band_idx > 0 and band_idx < NUM_SPECTRUM_BANDS:  # Skip band 0
                         # Gaussian-shaped suppression centered on harmonic
                         distance = abs(offset) / float(suppression_width + 1)
                         suppression = 0.3 + (0.7 * np.exp(-distance * distance))  # 0.3 to 1.0
                         harmonic_suppression[band_idx] *= suppression
         
         spectrum_bands = spectrum_bands * harmonic_suppression
+        
+        # Bass bleed: if band 0 is weak but band 1 is strong, give some energy to band 0
+        # This compensates for FFT resolution issues at very low frequencies
+        if spectrum_bands[1] > spectrum_bands[0]:
+           bleed_amount = 0.3  # 30% of band 1 energy bleeds down to band 0
+           bleed = spectrum_bands[1] * bleed_amount
+           spectrum_bands[0] += bleed
 
         # Find dominant band BEFORE normalization (raw energy)
         total_band_energy = float(np.sum(spectrum_bands))
@@ -208,12 +219,17 @@ class AudioAnalyzer:
         self.spectrum_max = np.maximum(spectrum_bands, self.spectrum_max * self.spectrum_decay_rate)
 
         # Normalize: divide by running max, but don't let quiet bands inflate
-        # Use a very gentle noise floor: bands below 0.1% of global max stay quiet
+        # Use a very forgiving noise floor that's more lenient for bass bands
         global_max = float(np.max(self.spectrum_max))
-        noise_floor = global_max * 0.001  # Very gentle threshold (0.1%)
         
         spectrum_norm = np.zeros(NUM_SPECTRUM_BANDS)
         for i in range(NUM_SPECTRUM_BANDS):
+            # More forgiving noise floor for lower bands (less than 0.05% for bands 0-5)
+            if i < 6:
+                noise_floor = global_max * 0.0005  # 0.05% for bass bands
+            else:
+                noise_floor = global_max * 0.001   # 0.1% for higher bands
+            
             if spectrum_bands[i] > noise_floor:
                 spectrum_norm[i] = spectrum_bands[i] / np.maximum(self.spectrum_max[i], 0.01)
             else:
