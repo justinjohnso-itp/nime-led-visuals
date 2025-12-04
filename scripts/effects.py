@@ -173,40 +173,54 @@ class LEDEffects:
             else:
                 band_idx, pos_in_band = 31, 0.5
             
-            # Create a WIDE frequency "group" with double the LED count
-            # Blend across multiple adjacent bands to create a large, cohesive visual cluster
+            # Create an EXTRA-WIDE frequency "group" with 4x the original LED count
+            # Blend across FOUR levels of adjacent bands for a massive, cohesive visual cluster
             # The fundamental band gets peak brightness, spreads far to adjacent bands
             distance_from_center = abs(pos_in_band - 0.5)  # 0.0 at center, 0.5 at edges
-            # Even gentler window: (1 - 0.3*x) to keep energy distributed across wider group
-            # Brightness stays at 0.7 even at band edges, spreading energy further
-            center_weight = max(0.0, 1.0 - distance_from_center * 0.6)  # Very gentle falloff 1.0→0.7
+            # Minimal falloff: (1 - 0.2*x) to keep energy distributed across very wide group
+            # Brightness stays at 0.8 even at band edges, spreading energy very far
+            center_weight = max(0.0, 1.0 - distance_from_center * 0.4)  # Very gentle falloff 1.0→0.8
             feathered_energy = center_weight * float(spectrum[band_idx])
 
-            # VERY aggressive feathering: blend adjacent AND second-adjacent bands
-            # This creates a wide, strong visual cluster that's 2x the previous width
-            # Goal: twice as many LEDs lit for the same tone
+            # EXTREMELY aggressive feathering: blend 4 levels of adjacent bands
+            # This creates a massive visual cluster that's 4x the original width (2x previous)
+            # Goal: twice as many LEDs lit compared to the already-doubled width
             
-            # First adjacent bands: high contribution (40% max)
+            # First adjacent bands: very high contribution (50% max)
             if band_idx > 0:
-                # Previous adjacent band contributes strongly
-                prev_weight = 0.40 * max(0.0, (pos_in_band - 0.10) / 0.40)  # Ramps 0.0-0.40 as pos goes 0.10-0.50
+                prev_weight = 0.50 * max(0.0, (pos_in_band - 0.0) / 0.50)  # Full range blend
                 feathered_energy += prev_weight * float(spectrum[band_idx - 1])
 
             if band_idx < 31:
-                # Next adjacent band contributes strongly
-                next_weight = 0.40 * max(0.0, (0.90 - pos_in_band) / 0.40)  # Ramps 0.40-0.0 as pos goes 0.50-0.90
+                next_weight = 0.50 * max(0.0, (1.0 - pos_in_band) / 0.50)  # Full range blend
                 feathered_energy += next_weight * float(spectrum[band_idx + 1])
             
-            # Second adjacent bands: moderate contribution (15% max) to extend the group further
+            # Second adjacent bands: high contribution (35% max)
             if band_idx > 1:
-                # Second-previous adjacent band contributes moderately
-                prev2_weight = 0.15 * max(0.0, (pos_in_band - 0.0) / 0.50)  # Ramps 0.0-0.15 as pos goes 0.0-0.50
+                prev2_weight = 0.35 * max(0.0, (pos_in_band - 0.0) / 0.50)
                 feathered_energy += prev2_weight * float(spectrum[band_idx - 2])
 
             if band_idx < 30:
-                # Second-next adjacent band contributes moderately
-                next2_weight = 0.15 * max(0.0, (1.0 - pos_in_band) / 0.50)  # Ramps 0.15-0.0 as pos goes 0.50-1.0
+                next2_weight = 0.35 * max(0.0, (1.0 - pos_in_band) / 0.50)
                 feathered_energy += next2_weight * float(spectrum[band_idx + 2])
+            
+            # Third adjacent bands: moderate contribution (20% max) - NEW LAYER
+            if band_idx > 2:
+                prev3_weight = 0.20 * max(0.0, (pos_in_band - 0.0) / 0.50)
+                feathered_energy += prev3_weight * float(spectrum[band_idx - 3])
+
+            if band_idx < 29:
+                next3_weight = 0.20 * max(0.0, (1.0 - pos_in_band) / 0.50)
+                feathered_energy += next3_weight * float(spectrum[band_idx + 3])
+            
+            # Fourth adjacent bands: light contribution (10% max) - NEW LAYER
+            if band_idx > 3:
+                prev4_weight = 0.10 * max(0.0, (pos_in_band - 0.0) / 0.50)
+                feathered_energy += prev4_weight * float(spectrum[band_idx - 4])
+
+            if band_idx < 28:
+                next4_weight = 0.10 * max(0.0, (1.0 - pos_in_band) / 0.50)
+                feathered_energy += next4_weight * float(spectrum[band_idx + 4])
 
             feathered_energy = min(1.0, feathered_energy)
 
