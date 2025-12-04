@@ -62,8 +62,8 @@ class AudioAnalyzer:
             idx = np.where((self.spectrum_freqs >= low_f) & (self.spectrum_freqs < high_f))[0]
             self.spectrum_bins.append(idx if idx.size > 0 else None)
         
-        # Running max decay rate for 32-band spectrum (very slow to hold peaks)
-        self.spectrum_decay_rate = 0.98  # Very slow decay to hold frequency peaks
+        # Running max decay rate for 32-band spectrum (extremely slow to hold peaks)
+        self.spectrum_decay_rate = 0.99  # Extremely slow decay to hold frequency peaks
         
         # A-weighting curve for perceptual loudness (approximate)
         # Makes the spectrum reflect what's actually audible
@@ -152,8 +152,9 @@ class AudioAnalyzer:
         spectrum_fft = rfft(spectrum_windowed)
         spectrum_power = spectrum_fft.real ** 2 + spectrum_fft.imag ** 2
         
-        # Apply A-weighting for perceptual loudness
-        spectrum_power = spectrum_power * self.a_weight
+        # A-weighting disabled for instrument visualization
+        # (A-weighting suppresses bass; we want full spectrum representation)
+        # spectrum_power = spectrum_power * self.a_weight
         
         spectrum_bands = np.zeros(NUM_SPECTRUM_BANDS)
         for i, idx in enumerate(self.spectrum_bins):
@@ -176,9 +177,9 @@ class AudioAnalyzer:
         self.spectrum_max = np.maximum(spectrum_bands, self.spectrum_max * self.spectrum_decay_rate)
 
         # Normalize: divide by running max, but don't let quiet bands inflate
-        # Use a gentler noise floor: bands below 0.5% of global max stay quiet
+        # Use a very gentle noise floor: bands below 0.1% of global max stay quiet
         global_max = float(np.max(self.spectrum_max))
-        noise_floor = global_max * 0.005  # Much gentler threshold
+        noise_floor = global_max * 0.001  # Very gentle threshold (0.1%)
         
         spectrum_norm = np.zeros(NUM_SPECTRUM_BANDS)
         for i in range(NUM_SPECTRUM_BANDS):
