@@ -273,11 +273,9 @@ class AudioAnalyzer:
         
         spectrum_norm = np.clip(spectrum_norm, 0.0, 1.0)
         
-        # Apply brightness gamma compression to lift mid-level values
-        # This makes sustained notes brighter without blowing out transients
-        # gamma < 1 lifts values: 0.2 → 0.34, 0.4 → 0.54
-        gamma = 1.0 / BRIGHTNESS_EXPONENT  # e.g. 1/1.5 = 0.67
-        spectrum_norm = np.power(spectrum_norm, gamma)
+        # NOTE: Gamma compression was tried here but it lifted suppressed harmonics
+        # back to visible levels, undoing the harmonic suppression work.
+        # Keep spectrum_norm as-is; brightness is handled by LED_BRIGHTNESS.
 
         # Smooth with previous frame (reduces flickering)
         attack = 0.6
