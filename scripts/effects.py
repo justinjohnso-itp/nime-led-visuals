@@ -105,176 +105,80 @@ class LEDEffects:
     
     @staticmethod
     def frequency_spectrum(strips, features):
-        """32-band frequency spectrum with edge effects
+        """Mirrored logarithmic 32-band frequency spectrum analyzer
         
-        Uses 32-band spectrum for smooth color mapping:
-        - Bands 0-7 (20-200 Hz): Red (bass)
-        - Bands 8-15 (200-1.5k Hz): Amber (low-mid)  
-        - Bands 16-31 (1.5k-20k Hz): Blue edges (treble)
+        Center = Band 0 (bass, red)
+        Mirrored outward = Bands 1→31 (progressively bluer toward edges, treble)
+        
+        LED allocation is logarithmic in frequency (equal visual space per octave).
+        Brightness = energy in that band.
         
         Args:
             strips: list of 3 PixelSubset objects [left, center, right]
             features: dict with 'spectrum' (32-band array) and 'envelope'
         """
+        from config import SPECTRUM_FREQS
+        
         spectrum = features.get('spectrum', None)
-        envelope = features.get('envelope', 0.0)
-        dominant_band = features.get('dominant_band', -1)
-        tonalness = features.get('tonalness', 0.0)
         
         if spectrum is None or len(spectrum) < 32:
             spectrum = np.zeros(32)
         
-        # Find dominant frequency in the spectrum (peak energy)
-        # This is more accurate than blending multiple regions
-        if dominant_band < 0:
-            dominant_band = int(np.argmax(spectrum))
-        
-        # Get energy at the dominant band only (strict frequency isolation)
-        core_energy = float(spectrum[dominant_band])
-        
-        # Map band to hue: 32 bands → full spectrum (red at 0°, blue at 240°)
-        target_hue = LEDEffects.get_band_hue(dominant_band)
-        
-        # Brightness from envelope - go fully dark when envelope is near zero
-        if envelope < 0.01:
-            target_brightness = 0.0
-        else:
-            target_brightness = max(MIN_BRIGHTNESS, envelope ** BRIGHTNESS_EXPONENT)
-        
-        # Only show blue edges if dominant band is actually in treble range (bands 20-31)
-        # For bass/mid bands (0-19), suppress edge brightness to prevent cross-band bleed
-        if dominant_band >= 20:
-            target_edge = core_energy  # Treble: show edges
-        else:
-            target_edge = 0.0  # Bass/Mid: no edges (no cross-band bleed)
-        
-        # Smoothing - very snappy for dynamic range
-        attack = 0.8
-        decay = 0.15
-        
-        # Hue smoothing
-        hue_diff = target_hue - LEDEffects._prev_hue
-        LEDEffects._prev_hue += hue_diff * (attack if hue_diff > 0 else decay)
-        
-        # Brightness smoothing - very aggressive decay to zero for dynamic peaks
-        if target_brightness > LEDEffects._prev_brightness:
-            LEDEffects._prev_brightness += (target_brightness - LEDEffects._prev_brightness) * attack
-        elif target_brightness < 0.01:
-            LEDEffects._prev_brightness *= 0.4  # Very fast fade to black
-        else:
-            LEDEffects._prev_brightness += (target_brightness - LEDEffects._prev_brightness) * decay
-        
-        # Edge smoothing - instant rise, snappy decay
-        if target_edge > LEDEffects._prev_edge:
-            LEDEffects._prev_edge = target_edge  # Instant
-        else:
-            LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.25  # Fast decay
-        
-        # Core energy smoothing - instant rise, ultra-aggressive decay for maximum movement
-        # Only update bass if dominant band is in bass/low-mid range (bands 0-9)
-        if dominant_band < 10:
-            if core_energy > LEDEffects._prev_bass:
-                LEDEffects._prev_bass = core_energy  # Instant
-            else:
-                LEDEffects._prev_bass *= 0.5  # Drop to 50% each frame (collapses in ~2 frames)
-        else:
-            # Treble dominant: fade out red core
-            LEDEffects._prev_bass *= 0.5
-        
-        # Simple: just red core and blue edges, both dynamic
-        red_brightness = LEDEffects._prev_bass * LEDEffects._prev_brightness * LED_BRIGHTNESS  # Red follows core
-        blue_brightness = LEDEffects._prev_edge * LED_BRIGHTNESS  # Blue follows dominant band
-        
-        # If everything is dark, just black
-        if red_brightness < 0.005 and blue_brightness < 0.005:
-            for strip in strips:
-                strip.fill((0, 0, 0))
-            return
-        
         # Treat all 432 LEDs as one continuous strip
         total_leds = NUM_LEDS_PER_STRIP * NUM_STRIPS
         center = total_leds // 2
+        leds_per_side = total_leds // 2
         
-        # Red core size and blue edge size
-        red_core_size = int(total_leds * 0.45 * LEDEffects._prev_bass)  # 0-45% from center outward (bigger)
-        blue_edge_size = int(total_leds * 0.2 * LEDEffects._prev_edge)  # 0-20% on each end
+        # Calculate LED allocation for each band based on logarithmic frequency spacing
+        # Each band gets LEDs proportional to log(freq_end) - log(freq_start)
+        band_led_counts = []
+        log_freq_widths = []
+        for band_idx in range(32):
+            log_width = np.log10(SPECTRUM_FREQS[band_idx + 1]) - np.log10(SPECTRUM_FREQS[band_idx])
+            log_freq_widths.append(log_width)
         
-        # Build full 432-LED array with feathering
+        total_log_width = sum(log_freq_widths)
+        for log_width in log_freq_widths:
+            led_count = int((log_width / total_log_width) * leds_per_side)
+            band_led_counts.append(max(1, led_count))  # At least 1 LED per band
+        
+        # Build cumulative LED positions for each band
+        band_led_start = [0]
+        for count in band_led_counts[:-1]:
+            band_led_start.append(band_led_start[-1] + count)
+        
+        # Build full 432-LED array: mirrored spectrum from center outward
         leds = []
         for i in range(total_leds):
-            # Distance from center (0 at center, increases toward edges)
             dist_from_center = abs(i - center)
             
-            # Red core: spreads from center outward with dynamic hue feathering based on bass
-            # Very bassy = more deeper reds, less feathering
-            # Less bassy = more oranges, more feathering
-            if red_core_size > 0 and dist_from_center < red_core_size:
-                red_blend = max(0.0, 1.0 - (dist_from_center / red_core_size))
-                # Distance-based dimming: center stays bright, edges dim faster
-                # Center (distance 0) = 1.0x, edges = 0.4x multiplier
-                distance_factor = 1.0 - (dist_from_center / red_core_size) * 0.6
-                
-                # Dynamic feather zone: high bass = small feather zone (more red), low bass = large feather zone (more orange)
-                feather_start = red_core_size * (0.5 + 0.3 * LEDEffects._prev_bass)  # 0.5-0.8 range
-                if dist_from_center > feather_start:
-                    # In feather zone
-                    feather_progress = (dist_from_center - feather_start) / (red_core_size - feather_start)
-                    hue_shift = feather_progress * 30.0  # 0° → 30°
-                else:
-                    # In solid red zone
-                    hue_shift = 0.0
-                red_hue = hue_shift / 360.0
-                red_sat = 1.0
-                red_val = red_brightness * red_blend * distance_factor  # Center dims slower than edges
-                # Apply ITU BT.709 perceptual brightness correction
-                brightness_correction = LEDEffects.get_perceptual_brightness_correction(hue_shift)
-                red_val = min(1.0, red_val * brightness_correction)
-                r_f, g_f, b_f = colorsys.hsv_to_rgb(red_hue, red_sat, red_val)
-                r_red = int(r_f * 255)
-                g_red = int(g_f * 255)
-                b_red = int(b_f * 255)
-            else:
-                r_red = g_red = b_red = 0
-                red_blend = 0.0
+            # Find which band this LED belongs to based on distance from center
+            band_idx = 0
+            for idx, start_pos in enumerate(band_led_start):
+                if dist_from_center < start_pos + band_led_counts[idx]:
+                    band_idx = idx
+                    break
+            band_idx = min(31, band_idx)
             
-            # Blue edges: on far left and far right with hue feathering only at inner boundary
-            # Blue (240°) for most of it → Cyan (180°) only in inner 20%, with brightness falloff
-            dist_from_left = i
-            dist_from_right = total_leds - 1 - i
-            is_left_edge = dist_from_left < blue_edge_size
-            is_right_edge = dist_from_right < blue_edge_size
+            # Energy in this band
+            band_energy = float(spectrum[band_idx])
             
-            if is_left_edge or is_right_edge:
-                edge_dist = min(dist_from_left if is_left_edge else total_leds, 
-                               dist_from_right if is_right_edge else total_leds)
-                blue_blend = max(0.0, 1.0 - (edge_dist / max(blue_edge_size, 1)))
-                # Only feather in the last 20% before center (inner edge of blue zone)
-                feather_start = blue_edge_size * 0.8
-                if edge_dist > feather_start:
-                    # In feather zone (far from outer edge, close to center)
-                    feather_progress = (edge_dist - feather_start) / (blue_edge_size - feather_start)
-                    hue_shift = feather_progress * 60.0  # 240° → 180°
-                else:
-                    # In solid blue zone (close to outer edge)
-                    hue_shift = 0.0
-                blue_hue = (240.0 - hue_shift) / 360.0
-                blue_sat = 1.0
-                blue_val = blue_brightness * blue_blend
-                # Apply ITU BT.709 perceptual brightness correction
-                brightness_correction = LEDEffects.get_perceptual_brightness_correction(240.0 - hue_shift)
-                blue_val = min(1.0, blue_val * brightness_correction)
-                r_f, g_f, b_f = colorsys.hsv_to_rgb(blue_hue, blue_sat, blue_val)
-                r_blue = int(r_f * 255)
-                g_blue = int(g_f * 255)
-                b_blue = int(b_f * 255)
-            else:
-                r_blue = g_blue = b_blue = 0
-                blue_blend = 0.0
+            # Hue for this band: red (0°) at band 0, blue (240°) at band 31
+            band_hue = LEDEffects.get_band_hue(band_idx)
             
-            # Mix red and blue
-            r = int(max(0, min(255, r_red + r_blue)))
-            g = int(max(0, min(255, g_red + g_blue)))
-            b = int(max(0, min(255, b_red + b_blue)))
+            # Brightness = band energy scaled by LED_BRIGHTNESS
+            band_brightness = band_energy * LED_BRIGHTNESS
+            
+            # Apply perceptual brightness correction for this hue
+            brightness_correction = LEDEffects.get_perceptual_brightness_correction(band_hue)
+            band_brightness = min(1.0, band_brightness * brightness_correction)
+            
+            # Convert HSV to RGB
+            hue_normalized = band_hue / 360.0
+            r_f, g_f, b_f = colorsys.hsv_to_rgb(hue_normalized, 1.0, band_brightness)
+            r = int(r_f * 255)
+            g = int(g_f * 255)
+            b = int(b_f * 255)
             
             leds.append((r, g, b))
         
