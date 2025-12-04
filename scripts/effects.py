@@ -166,15 +166,15 @@ class LEDEffects:
         else:
             LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.25  # Fast decay
         
-        # Bass smoothing - instant rise, ultra-aggressive decay for maximum movement
-        if bass_energy > LEDEffects._prev_bass:
-            LEDEffects._prev_bass = bass_energy  # Instant
+        # Core energy smoothing - instant rise, ultra-aggressive decay for maximum movement
+        if core_energy > LEDEffects._prev_bass:
+            LEDEffects._prev_bass = core_energy  # Instant
         else:
             LEDEffects._prev_bass *= 0.5  # Drop to 50% each frame (collapses in ~2 frames)
         
         # Simple: just red core and blue edges, both dynamic
-        red_brightness = LEDEffects._prev_bass * LEDEffects._prev_brightness * LED_BRIGHTNESS  # Red follows bass
-        blue_brightness = LEDEffects._prev_edge * LED_BRIGHTNESS  # Blue follows treble
+        red_brightness = LEDEffects._prev_bass * LEDEffects._prev_brightness * LED_BRIGHTNESS  # Red follows core
+        blue_brightness = LEDEffects._prev_edge * LED_BRIGHTNESS  # Blue follows dominant band
         
         # If everything is dark, just black
         if red_brightness < 0.005 and blue_brightness < 0.005:
