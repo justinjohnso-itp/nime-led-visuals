@@ -141,8 +141,12 @@ class LEDEffects:
         else:
             target_brightness = max(MIN_BRIGHTNESS, envelope ** BRIGHTNESS_EXPONENT)
         
-        # Edge intensity from dominant band energy (strict, no cross-band bleed)
-        target_edge = core_energy  # Use peak energy, not averaged
+        # Only show blue edges if dominant band is actually in treble range (bands 20-31)
+        # For bass/mid bands (0-19), suppress edge brightness to prevent cross-band bleed
+        if dominant_band >= 20:
+            target_edge = core_energy  # Treble: show edges
+        else:
+            target_edge = 0.0  # Bass/Mid: no edges (no cross-band bleed)
         
         # Smoothing - very snappy for dynamic range
         attack = 0.8
@@ -167,10 +171,15 @@ class LEDEffects:
             LEDEffects._prev_edge += (target_edge - LEDEffects._prev_edge) * 0.25  # Fast decay
         
         # Core energy smoothing - instant rise, ultra-aggressive decay for maximum movement
-        if core_energy > LEDEffects._prev_bass:
-            LEDEffects._prev_bass = core_energy  # Instant
+        # Only update bass if dominant band is in bass/low-mid range (bands 0-9)
+        if dominant_band < 10:
+            if core_energy > LEDEffects._prev_bass:
+                LEDEffects._prev_bass = core_energy  # Instant
+            else:
+                LEDEffects._prev_bass *= 0.5  # Drop to 50% each frame (collapses in ~2 frames)
         else:
-            LEDEffects._prev_bass *= 0.5  # Drop to 50% each frame (collapses in ~2 frames)
+            # Treble dominant: fade out red core
+            LEDEffects._prev_bass *= 0.5
         
         # Simple: just red core and blue edges, both dynamic
         red_brightness = LEDEffects._prev_bass * LEDEffects._prev_brightness * LED_BRIGHTNESS  # Red follows core
