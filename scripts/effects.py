@@ -180,32 +180,21 @@ class LEDEffects:
             else:
                 band_idx, pos_in_band = 31, 0.5
             
-            # Feather energy with adjacent bands using wider window for smoother transitions
-            # Use triangular window with minimum weight to avoid zero at band edges
-            center_weight = max(0.25, 1.0 - abs(pos_in_band - 0.5) * 2.0)
+            # Narrow feathering for tight sweep visualization
+            # Only nearby frequencies light up - this makes frequency sweeps visible as moving light
+            center_weight = 1.0 - abs(pos_in_band - 0.5) * 2.0
             feathered_energy = center_weight * float(spectrum[band_idx])
             
-            # Increased blending from adjacent bands for smoother visualization
-            if band_idx > 0:
-                # Previous band: 50% weight at edge
-                prev_weight = 0.5 * max(0.0, 0.5 - pos_in_band)
+            # Minimal blending: only at band edges, minimal weight
+            if band_idx > 0 and center_weight < 0.3:
+                # Adjacent band: only blend when center is near edge
+                prev_weight = 0.1 * max(0.0, 0.5 - pos_in_band)
                 feathered_energy += prev_weight * float(spectrum[band_idx - 1])
             
-            if band_idx < 31:
-                # Next band: 50% weight at edge
-                next_weight = 0.5 * max(0.0, pos_in_band - 0.5)
+            if band_idx < 31 and center_weight < 0.3:
+                # Adjacent band: only blend when center is near edge
+                next_weight = 0.1 * max(0.0, pos_in_band - 0.5)
                 feathered_energy += next_weight * float(spectrum[band_idx + 1])
-            
-            # Also add very light blend from bands 2 steps away to smooth holes
-            if band_idx > 1:
-                # Two bands back: small weight
-                prev2_weight = 0.1 * max(0.0, 0.5 - pos_in_band)
-                feathered_energy += prev2_weight * float(spectrum[band_idx - 2])
-            
-            if band_idx < 30:
-                # Two bands forward: small weight
-                next2_weight = 0.1 * max(0.0, pos_in_band - 0.5)
-                feathered_energy += next2_weight * float(spectrum[band_idx + 2])
             
             feathered_energy = min(1.0, feathered_energy)
             
@@ -214,6 +203,10 @@ class LEDEffects:
             
             # Brightness = feathered energy scaled by LED_BRIGHTNESS
             band_brightness = feathered_energy * LED_BRIGHTNESS
+            
+            # Apply threshold: only show LEDs with significant brightness (tighter sweep band)
+            if band_brightness < 0.06:
+                band_brightness = 0.0
             
             # Apply perceptual brightness correction for this hue
             brightness_correction = LEDEffects.get_perceptual_brightness_correction(band_hue)
