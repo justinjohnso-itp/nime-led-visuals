@@ -140,17 +140,21 @@ class LEDEffects:
         band_boundaries = [0.0]  # Start at 0.0
         for log_width in log_freq_widths:
             cumulative_log_width += log_width / total_log_width
-            band_boundaries.append(cumulative_log_width)
+            band_boundaries.append(min(1.0, cumulative_log_width))  # Clamp to 1.0
+        band_boundaries[-1] = 1.0  # Ensure last boundary is exactly 1.0
         
         # Map each LED position to a band based on logarithmic frequency distribution
         def get_band_for_position(pos, leds_per_side):
             """Map LED position (0 to leds_per_side-1) to band index (0-31)"""
             # Normalize position to 0.0-1.0
-            normalized_pos = pos / float(max(leds_per_side - 1, 1))
+            if leds_per_side <= 1:
+                return 0
+            normalized_pos = min(1.0, pos / float(leds_per_side - 1))  # Clamp to 1.0
             
-            # Binary search to find which band this position falls into
+            # Find which band this position falls into
+            # band_boundaries[i] is the start of band i, band_boundaries[i+1] is the end
             for band_idx in range(32):
-                if normalized_pos < band_boundaries[band_idx + 1]:
+                if normalized_pos < band_boundaries[band_idx + 1] or band_idx == 31:
                     return band_idx
             return 31  # Fallback to last band
         
