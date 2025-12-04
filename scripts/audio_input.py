@@ -139,7 +139,8 @@ class LiveAudioInput(AudioInput):
             raise
 
         # Resolve device by name pattern, index, or auto-select
-        resolved_device = _select_input_device(device, sd, min_input_channels=2)
+        # Allow mono devices (1 channel) - most USB audio interfaces are mono
+        resolved_device = _select_input_device(device, sd, min_input_channels=1)
         dev_info = sd.query_devices(resolved_device)
         channels = min(2, dev_info["max_input_channels"])
 
