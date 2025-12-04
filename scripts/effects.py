@@ -129,51 +129,38 @@ class LEDEffects:
         center = total_leds // 2
         leds_per_side = total_leds // 2
         
-        # Calculate LED allocation for each band based on logarithmic frequency spacing
-        # Each band gets LEDs proportional to log(freq_end) - log(freq_start)
-        band_led_counts = []
+        # Calculate cumulative log frequency widths (0.0 to 1.0)
         log_freq_widths = []
         for band_idx in range(32):
             log_width = np.log10(SPECTRUM_FREQS[band_idx + 1]) - np.log10(SPECTRUM_FREQS[band_idx])
             log_freq_widths.append(log_width)
         
         total_log_width = sum(log_freq_widths)
+        cumulative_log_width = 0.0
+        band_boundaries = [0.0]  # Start at 0.0
         for log_width in log_freq_widths:
-            led_count = int((log_width / total_log_width) * leds_per_side)
-            band_led_counts.append(max(1, led_count))  # At least 1 LED per band
+            cumulative_log_width += log_width / total_log_width
+            band_boundaries.append(cumulative_log_width)
         
-        # Adjust rounding: add leftover LEDs to bands with largest fractional parts
-        total_allocated = sum(band_led_counts)
-        leftover = leds_per_side - total_allocated
-        if leftover > 0:
-            # Find bands with largest fractional parts (most undercounted)
-            fractions = [(log_freq_widths[i] / total_log_width) * leds_per_side - band_led_counts[i] 
-                        for i in range(32)]
-            for _ in range(leftover):
-                idx = np.argmax(fractions)
-                band_led_counts[idx] += 1
-                fractions[idx] = -1.0  # Mark as used
-        
-        # Build mapping of LED position to band index
-        # Position 0 at center = band 0, expanding outward
-        position_to_band = [0] * leds_per_side
-        current_pos = 0
-        for band_idx, led_count in enumerate(band_led_counts):
-            for _ in range(led_count):
-                if current_pos < leds_per_side:
-                    position_to_band[current_pos] = band_idx
-                    current_pos += 1
+        # Map each LED position to a band based on logarithmic frequency distribution
+        def get_band_for_position(pos, leds_per_side):
+            """Map LED position (0 to leds_per_side-1) to band index (0-31)"""
+            # Normalize position to 0.0-1.0
+            normalized_pos = pos / float(max(leds_per_side - 1, 1))
+            
+            # Binary search to find which band this position falls into
+            for band_idx in range(32):
+                if normalized_pos < band_boundaries[band_idx + 1]:
+                    return band_idx
+            return 31  # Fallback to last band
         
         # Build full 432-LED array: mirrored spectrum from center outward
         leds = []
         for i in range(total_leds):
             dist_from_center = abs(i - center)
             
-            # Map distance to band index using the lookup table
-            if dist_from_center < leds_per_side:
-                band_idx = position_to_band[dist_from_center]
-            else:
-                band_idx = 31  # Shouldn't happen, but safety fallback
+            # Map distance to band index based on logarithmic distribution
+            band_idx = get_band_for_position(dist_from_center, leds_per_side)
             
             # Energy in this band
             band_energy = float(spectrum[band_idx])
