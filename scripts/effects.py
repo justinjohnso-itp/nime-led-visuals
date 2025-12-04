@@ -173,25 +173,26 @@ class LEDEffects:
             else:
                 band_idx, pos_in_band = 31, 0.5
             
-            # Create a cohesive frequency "group" with center peak and linear falloff
-            # The fundamental band gets peak brightness, brightness falls off linearly to adjacent bands
-            # Use a softer window: quadratic falloff instead of linear, so group stays lit
+            # Create a strong, cohesive frequency "group" with no dim LEDs
+            # The fundamental band gets peak brightness, spreads to adjacent bands with linear falloff
+            # Use a very soft window: quadratic falloff so group stays fully lit
             distance_from_center = abs(pos_in_band - 0.5)  # 0.0 at center, 0.5 at edges
-            # Quadratic window: (1 - x^2) keeps more energy in the group compared to linear (1 - 2x)
-            center_weight = max(0.0, 1.0 - (distance_from_center * 2.0) ** 1.5)  # 1.0 at center, gentle curve to 0
+            # Very gentle quadratic: (1 - x^1.0) = linear, but we want even gentler
+            # Use (1 - 0.5*x) to keep brightness at 0.5 even at band edges
+            center_weight = max(0.0, 1.0 - distance_from_center * 1.0)  # Gentle linear falloff 1.0→0.5
             feathered_energy = center_weight * float(spectrum[band_idx])
 
-            # Moderate feathering: blend adjacent bands to fill out the group and make it cohesive
-            # This creates one solid "blob" of lit LEDs that's brighter in the center
-            # Reduced from avoiding adjacents entirely to 15% blend to keep visual integrity of the group
+            # Aggressive feathering: blend adjacent bands generously to fill the group completely
+            # This ensures every LED in the group is bright - no dark spots
+            # Increased to 25% to create a strong, cohesive visual cluster
             if band_idx > 0:
-                # Adjacent band contributes more to fill out the group
-                prev_weight = 0.15 * max(0.0, (pos_in_band - 0.35) / 0.15)  # Ramps 0.0-0.15 as pos goes 0.35-0.50
+                # Adjacent band contributes strongly to fill out the group
+                prev_weight = 0.25 * max(0.0, (pos_in_band - 0.25) / 0.25)  # Ramps 0.0-0.25 as pos goes 0.25-0.50
                 feathered_energy += prev_weight * float(spectrum[band_idx - 1])
 
             if band_idx < 31:
-                # Adjacent band contributes more to fill out the group
-                next_weight = 0.15 * max(0.0, (0.65 - pos_in_band) / 0.15)  # Ramps 0.15-0.0 as pos goes 0.50-0.65
+                # Adjacent band contributes strongly to fill out the group
+                next_weight = 0.25 * max(0.0, (0.75 - pos_in_band) / 0.25)  # Ramps 0.25-0.0 as pos goes 0.50-0.75
                 feathered_energy += next_weight * float(spectrum[band_idx + 1])
 
             feathered_energy = min(1.0, feathered_energy)

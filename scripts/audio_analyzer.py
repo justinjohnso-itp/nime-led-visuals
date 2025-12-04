@@ -219,16 +219,19 @@ class AudioAnalyzer:
         
         spectrum_bands = spectrum_bands * harmonic_suppression
         
-        # Post-suppression cleanup: kill any band that's more than 3x the median energy
-        # This catches any harmonics that slipped through the net
+        # Post-suppression cleanup: kill any band that's way above neighbors (escaped harmonics)
+        # This catches harmonics that slipped through the ±5% detection window, especially at high frequencies
         non_zero_bands = spectrum_bands[spectrum_bands > 0.0001]
         if len(non_zero_bands) > 5:
             median_energy = float(np.median(non_zero_bands))
+            # More aggressive threshold: 2.0x median instead of 2.5x to catch more harmonics
+            harmonic_threshold = median_energy * 2.0
+            
             for i in range(NUM_SPECTRUM_BANDS):
-                # If a band is way higher than its neighbors (harmonic), suppress it
-                if spectrum_bands[i] > median_energy * 2.5 and i != temp_dominant_band:
-                    # Only suppress if it's not the dominant band
-                    spectrum_bands[i] *= 0.3  # Reduce outlier bands to 30% of their value
+                # Check if this band is much higher than median (likely an escaped harmonic)
+                if spectrum_bands[i] > harmonic_threshold and i != temp_dominant_band:
+                    # Extra aggressive: reduce escaped harmonics to 10% (was 30%)
+                    spectrum_bands[i] *= 0.1
         
         # Bass bleed: DISABLED for tight fundamental visualization
         # The global normalization now handles bass prominence without spreading energy
