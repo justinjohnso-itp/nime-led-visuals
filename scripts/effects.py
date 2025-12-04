@@ -180,18 +180,32 @@ class LEDEffects:
             else:
                 band_idx, pos_in_band = 31, 0.5
             
-            # Feather energy with adjacent bands (inlined for speed)
+            # Feather energy with adjacent bands using wider window for smoother transitions
             # Use triangular window with minimum weight to avoid zero at band edges
-            center_weight = max(0.25, 1.0 - abs(pos_in_band - 0.5) * 2.0)  # Min 0.25 even at edges
+            center_weight = max(0.25, 1.0 - abs(pos_in_band - 0.5) * 2.0)
             feathered_energy = center_weight * float(spectrum[band_idx])
             
+            # Increased blending from adjacent bands for smoother visualization
             if band_idx > 0:
-                prev_weight = max(0.0, 0.5 - pos_in_band)
+                # Previous band: 50% weight at edge
+                prev_weight = 0.5 * max(0.0, 0.5 - pos_in_band)
                 feathered_energy += prev_weight * float(spectrum[band_idx - 1])
             
             if band_idx < 31:
-                next_weight = max(0.0, pos_in_band - 0.5)
+                # Next band: 50% weight at edge
+                next_weight = 0.5 * max(0.0, pos_in_band - 0.5)
                 feathered_energy += next_weight * float(spectrum[band_idx + 1])
+            
+            # Also add very light blend from bands 2 steps away to smooth holes
+            if band_idx > 1:
+                # Two bands back: small weight
+                prev2_weight = 0.1 * max(0.0, 0.5 - pos_in_band)
+                feathered_energy += prev2_weight * float(spectrum[band_idx - 2])
+            
+            if band_idx < 30:
+                # Two bands forward: small weight
+                next2_weight = 0.1 * max(0.0, pos_in_band - 0.5)
+                feathered_energy += next2_weight * float(spectrum[band_idx + 2])
             
             feathered_energy = min(1.0, feathered_energy)
             

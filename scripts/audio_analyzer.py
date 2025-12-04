@@ -196,19 +196,6 @@ class AudioAnalyzer:
         
         spectrum_bands = spectrum_bands * harmonic_suppression
         
-        # Spectral smoothing: blur energy across adjacent bands to fill holes
-        # This prevents dark regions in the LED visualization where bands have zero energy
-        smoothed = np.copy(spectrum_bands)
-        for i in range(NUM_SPECTRUM_BANDS):
-           neighbors = []
-           if i > 0:
-               neighbors.append(spectrum_bands[i - 1])
-           neighbors.append(spectrum_bands[i])
-           if i < NUM_SPECTRUM_BANDS - 1:
-               neighbors.append(spectrum_bands[i + 1])
-           smoothed[i] = np.mean(neighbors) * 0.7 + spectrum_bands[i] * 0.3  # 70% smoothed, 30% original
-        spectrum_bands = smoothed
-        
         # Bass bleed: if band 0 is weak but band 1 is strong, give some energy to band 0
         # This compensates for FFT resolution issues at very low frequencies
         if spectrum_bands[1] > spectrum_bands[0]:
