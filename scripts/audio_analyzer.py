@@ -162,46 +162,23 @@ class AudioAnalyzer:
                 spectrum_bands[i] = float(np.mean(spectrum_power[idx]))
         
         # Bass boost: low frequencies naturally quieter, enhance them for visualization
-        # Boost strongest at band 0, fade out by band 15
+        # Only boost the VERY LOWEST bands (0-3) to avoid flattening the spectrum
+        # CONSERVATIVE boost to keep spectrum tight around fundamental
         bass_boost = np.ones(NUM_SPECTRUM_BANDS)
-        for i in range(16):
-            # Very aggressive ramp from 15.0x boost (band 0) to 1.0x (band 15)
-            # Band 0 needs massive boost since FFT struggles with very low frequencies
-            bass_boost[i] = 15.0 - (i / 16.0) * 14.0
+        for i in range(4):
+            # Conservative ramp from 2.0x boost (band 0) to 1.0x (band 3)
+            # Minimal boost = tight visualization around fundamental
+            bass_boost[i] = 2.0 - (i / 4.0) * 1.0
         spectrum_bands = spectrum_bands * bass_boost
         
-        # Harmonic suppression: suppress overtones relative to the detected fundamental
-        # Find the strongest band (fundamental frequency of the note being played)
-        fundamental_band = int(np.argmax(spectrum_bands))
-        
-        # Suppress harmonics (2x, 3x, 4x, 5x) of the fundamental frequency
+        # Harmonic suppression: DISABLED for now
+        # Previous implementation was detecting wrong fundamentals due to bass boost artifacts
+        # The global normalization now provides enough sharpness that we don't need this
         harmonic_suppression = np.ones(NUM_SPECTRUM_BANDS)
-        harmonic_ratios = [2.0, 3.0, 4.0, 5.0]  # 2nd, 3rd, 4th, 5th harmonics
-        
-        # Never suppress band 0 (lowest bass)
-        harmonic_suppression[0] = 1.0
-        
-        for harmonic_ratio in harmonic_ratios:
-            harmonic_band = int(fundamental_band * harmonic_ratio)
-            if harmonic_band < NUM_SPECTRUM_BANDS and harmonic_band > 0:  # Skip band 0
-                # Suppress this harmonic band and its neighbors (±1 band width)
-                suppression_width = max(1, fundamental_band // 4)  # Band width depends on fundamental position
-                for offset in range(-suppression_width, suppression_width + 1):
-                    band_idx = harmonic_band + offset
-                    if band_idx > 0 and band_idx < NUM_SPECTRUM_BANDS:  # Skip band 0
-                        # Gaussian-shaped suppression centered on harmonic
-                        distance = abs(offset) / float(suppression_width + 1)
-                        suppression = 0.3 + (0.7 * np.exp(-distance * distance))  # 0.3 to 1.0
-                        harmonic_suppression[band_idx] *= suppression
-        
         spectrum_bands = spectrum_bands * harmonic_suppression
         
-        # Bass bleed: if band 0 is weak but band 1 is strong, give some energy to band 0
-        # This compensates for FFT resolution issues at very low frequencies
-        if spectrum_bands[1] > spectrum_bands[0]:
-           bleed_amount = 0.3  # 30% of band 1 energy bleeds down to band 0
-           bleed = spectrum_bands[1] * bleed_amount
-           spectrum_bands[0] += bleed
+        # Bass bleed: DISABLED for tight fundamental visualization
+        # The global normalization now handles bass prominence without spreading energy
 
         # Find dominant band BEFORE normalization (raw energy)
         total_band_energy = float(np.sum(spectrum_bands))
@@ -218,20 +195,16 @@ class AudioAnalyzer:
         # Update running max with decay (slower for 32-band spectrum to capture sustained notes)
         self.spectrum_max = np.maximum(spectrum_bands, self.spectrum_max * self.spectrum_decay_rate)
 
-        # Normalize: divide by running max, but don't let quiet bands inflate
-        # Use a very forgiving noise floor that's more lenient for bass bands
+        # Normalize using GLOBAL max (not per-band) to keep spectral peaks sharp
+        # This ensures the fundamental frequency stands out from harmonics/noise
         global_max = float(np.max(self.spectrum_max))
         
         spectrum_norm = np.zeros(NUM_SPECTRUM_BANDS)
         for i in range(NUM_SPECTRUM_BANDS):
-            # More forgiving noise floor for lower bands (less than 0.05% for bands 0-5)
-            if i < 6:
-                noise_floor = global_max * 0.0005  # 0.05% for bass bands
-            else:
-                noise_floor = global_max * 0.001   # 0.1% for higher bands
-            
-            if spectrum_bands[i] > noise_floor:
-                spectrum_norm[i] = spectrum_bands[i] / np.maximum(self.spectrum_max[i], 0.01)
+            # Use global maximum for normalization (not per-band max)
+            # This preserves the shape of the spectrum
+            if spectrum_bands[i] > 0:
+                spectrum_norm[i] = spectrum_bands[i] / np.maximum(global_max, 0.01)
             else:
                 spectrum_norm[i] = 0.0
         

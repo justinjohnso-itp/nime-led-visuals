@@ -169,10 +169,6 @@ class LEDEffects:
                 
                 band_map.append((band_idx, pos_in_band))
         
-        # Find dominant frequency band to apply spectral sharpening
-        dominant_band = int(np.argmax(spectrum))
-        dominant_energy = float(spectrum[dominant_band])
-        
         # Build full 432-LED array: mirrored spectrum from center outward
         leds = []
         for i in range(total_leds):
@@ -184,37 +180,30 @@ class LEDEffects:
             else:
                 band_idx, pos_in_band = 31, 0.5
             
-            # Tight feathering around fundamental frequency
-            # Center weight: 1.0 at band center, 0.0 at band edges
-            center_weight = 1.0 - abs(pos_in_band - 0.5) * 2.0
+            # Feather energy with adjacent bands - tight clustering around fundamental
+            # Use steep triangular window (narrow peak) to concentrate around the fundamental
+            center_weight = 1.0 - abs(pos_in_band - 0.5) * 2.0  # 1.0 at center, 0.0 at edges
             feathered_energy = center_weight * float(spectrum[band_idx])
-            
-            # Minimal blend with adjacent bands (only 0.1x) - much tighter clustering
-            if band_idx > 0 and center_weight < 0.5:
-                prev_weight = 0.1 * max(0.0, 0.5 - pos_in_band)
+
+            # Minimal feathering: only light adjacent bands (10% max) very near edges
+            # This creates a tight sweep band that follows the fundamental frequency
+            if band_idx > 0:
+                # Adjacent band only blends when very close to edge (pos_in_band > 0.45)
+                prev_weight = 0.1 * max(0.0, (pos_in_band - 0.45) / 0.05)  # Ramps 0.0-0.1 as pos goes 0.45-0.50
                 feathered_energy += prev_weight * float(spectrum[band_idx - 1])
-            
-            if band_idx < 31 and center_weight < 0.5:
-                next_weight = 0.1 * max(0.0, pos_in_band - 0.5)
+
+            if band_idx < 31:
+                # Adjacent band only blends when very close to edge (pos_in_band < 0.55)
+                next_weight = 0.1 * max(0.0, (0.55 - pos_in_band) / 0.05)  # Ramps 0.1-0.0 as pos goes 0.50-0.55
                 feathered_energy += next_weight * float(spectrum[band_idx + 1])
-            
+
             feathered_energy = min(1.0, feathered_energy)
-            
-            # Spectral sharpening: suppress bands far from dominant frequency
-            # Creates a "peak" effect that tightens the visualization
-            distance_from_dominant = abs(band_idx - dominant_band)
-            sharpening_factor = np.exp(-distance_from_dominant * 0.15)  # Gaussian suppression
-            feathered_energy = feathered_energy * (0.3 + 0.7 * sharpening_factor)
-            
+
             # Hue for this band: red (0°) at band 0, blue (240°) at band 31
             band_hue = LEDEffects.get_band_hue(band_idx)
             
             # Brightness = feathered energy scaled by LED_BRIGHTNESS
             band_brightness = feathered_energy * LED_BRIGHTNESS
-            
-            # Higher threshold for tighter visualization (only bright LEDs light up)
-            if band_brightness < 0.12:
-                band_brightness = 0.0
             
             # Apply perceptual brightness correction for this hue
             brightness_correction = LEDEffects.get_perceptual_brightness_correction(band_hue)
