@@ -124,25 +124,16 @@ class LEDEffects:
         if spectrum is None or len(spectrum) < 32:
             spectrum = np.zeros(32)
         
-        # Average energy in frequency regions (for edges/brightness)
-        bass_energy = float(np.mean(spectrum[0:10]))     # 20-173 Hz (red)
-        mid_energy = float(np.mean(spectrum[10:22]))     # 173-2.3k Hz (amber)
-        treble_energy = float(np.mean(spectrum[22:32]))  # 2.3k-20k Hz (blue edges)
+        # Find dominant frequency in the spectrum (peak energy)
+        # This is more accurate than blending multiple regions
+        if dominant_band < 0:
+            dominant_band = int(np.argmax(spectrum))
         
-        # Fallback blended hue
-        core_total = bass_energy + mid_energy + 0.001
-        bass_weight = bass_energy / core_total
-        mid_weight = mid_energy / core_total
-        blended_hue = (bass_weight * 0.0) + (mid_weight * 30.0)
+        # Get energy at the dominant band only (strict frequency isolation)
+        core_energy = float(spectrum[dominant_band])
         
-        # Use DOMINANT BAND for color when spectrum is tonal enough
-        TONALNESS_THRESHOLD = 0.15
-        if dominant_band >= 0 and tonalness > TONALNESS_THRESHOLD:
-            # Use smooth 32-band hue gradient for tonal sounds
-            target_hue = LEDEffects.get_band_hue(dominant_band)
-        else:
-            # Fall back to blended hue for noisy/broadband sounds
-            target_hue = blended_hue
+        # Map band to hue: 32 bands → full spectrum (red at 0°, blue at 240°)
+        target_hue = LEDEffects.get_band_hue(dominant_band)
         
         # Brightness from envelope - go fully dark when envelope is near zero
         if envelope < 0.01:
@@ -150,8 +141,8 @@ class LEDEffects:
         else:
             target_brightness = max(MIN_BRIGHTNESS, envelope ** BRIGHTNESS_EXPONENT)
         
-        # Edge intensity from treble (now 0-1 range since we use mean)
-        target_edge = treble_energy  # Direct mapping, already 0-1
+        # Edge intensity from dominant band energy (strict, no cross-band bleed)
+        target_edge = core_energy  # Use peak energy, not averaged
         
         # Smoothing - very snappy for dynamic range
         attack = 0.8
