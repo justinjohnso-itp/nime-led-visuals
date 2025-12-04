@@ -63,45 +63,45 @@ class LEDEffects:
     
     @staticmethod
     def get_perceptual_brightness_correction(hue_degrees):
-        """Correct RGB brightness so all hues appear equally bright to human eye.
+        """Apply ITU BT.709 luminance-based brightness correction.
         
-        Human eye sensitivity varies by wavelength (ITU BT.709 standard):
-        - Green (550nm): peak sensitivity = 1.0x
-        - Red (650nm): ~0.3x brightness perception
-        - Blue (470nm): ~0.11x brightness perception
+        Makes all hues appear equally bright to the human eye, with red at max brightness.
+        Uses inverse ITU BT.709 weighting: Y = 0.2126*R + 0.7152*G + 0.0722*B
         
-        For equal perceived brightness, scale color output inversely to human perception:
-        - Red needs to be 3.3x brighter (1.0 / 0.3)
-        - Blue needs to be 9.0x brighter (1.0 / 0.11)
-        - Green stays at 1.0x (baseline)
+        For red (1.0) perceived brightness = 0.2126, scale other colors:
+        - Red: 1.0x (baseline)
+        - Green: 0.297x (more sensitive eye perception)
+        - Blue: capped at 1.0x (even at max, blue is dimmer than red by nature)
         
         Args:
             hue_degrees: 0-360 hue value
             
         Returns:
-            brightness_multiplier: correction factor for the given hue
+            brightness_multiplier: correction factor for equal perceived brightness
         """
-        # Normalize hue to 0-1 range
+        # Normalize hue to 0-1
         hue_norm = hue_degrees / 360.0
         
-        # Map hue ranges to colors:
-        # 0° = Red (0.0)
-        # 120° = Green (0.333)
-        # 240° = Blue (0.667)
+        # Pure red (0°) and magenta (300-360°) need full brightness
+        # Pure green (120°) needs to be dimmed
+        # Pure blue (240°) stays full (already dim by nature)
         
-        if hue_norm < 0.167:  # 0° to 60° = Red to Yellow
-            # Red (0x) to Yellow (blend)
-            # Red: 3.3x, Yellow has green so less correction
-            progress = hue_norm / 0.167  # 0 to 1 within red zone
-            return 3.3 - (progress * 2.3)  # 3.3 down to 1.0 over red range
-        elif hue_norm < 0.5:  # 60° to 180° = Yellow to Cyan (Green zone)
-            # Yellow to Green to Cyan - green dominant, needs minimal correction
-            return 1.0  # Green is baseline
-        else:  # 180° to 360° = Cyan to Blue to Red (Blue/Magenta zone)
-            # Cyan (blend) to Blue to Magenta/Red
-            # Blue: 9.0x brightness
-            progress = (hue_norm - 0.5) / 0.5  # 0 to 1 within blue zone
-            return 1.0 + (progress * 8.0)  # 1.0 up to 9.0 over blue range
+        if hue_norm < 0.083:  # 0-30°: Red to Orange (red dominant)
+            # Linear blend from pure red (1.0) toward orange which has green
+            progress = hue_norm / 0.083
+            return 1.0 - (progress * 0.7)  # 1.0 down to 0.3 over red range
+        elif hue_norm < 0.417:  # 30-150°: Orange to Cyan (green dominant)
+            # Green zone is most sensitive, needs heavy dimming
+            # Peak dimming at 120° (pure green at 0.297)
+            progress = (hue_norm - 0.083) / 0.334  # 0 to 1 in green range
+            # Use cosine curve to reach minimum at 120°
+            import math
+            dimming = 0.297 + (0.7 * math.cos(progress * math.pi))
+            return dimming
+        else:  # 150-360°: Cyan to Magenta to Red (blue/red dominant)
+            # Blue and magenta back toward red
+            progress = (hue_norm - 0.417) / 0.583  # 0 to 1 in blue/red range
+            return 0.3 + (progress * 0.7)  # 0.3 up to 1.0
     
     @staticmethod
     def frequency_spectrum(strips, features):
@@ -226,10 +226,10 @@ class LEDEffects:
                 red_hue = hue_shift / 360.0
                 red_sat = 1.0
                 red_val = red_brightness * red_blend * distance_factor  # Center dims slower than edges
-                # Apply perceptual brightness correction so red looks as bright as other colors
+                # Apply ITU BT.709 perceptual brightness correction
                 brightness_correction = LEDEffects.get_perceptual_brightness_correction(hue_shift)
-                red_val *= brightness_correction
-                r_f, g_f, b_f = colorsys.hsv_to_rgb(red_hue, red_sat, min(red_val, 1.0))
+                red_val = min(1.0, red_val * brightness_correction)
+                r_f, g_f, b_f = colorsys.hsv_to_rgb(red_hue, red_sat, red_val)
                 r_red = int(r_f * 255)
                 g_red = int(g_f * 255)
                 b_red = int(b_f * 255)
@@ -259,11 +259,11 @@ class LEDEffects:
                     hue_shift = 0.0
                 blue_hue = (240.0 - hue_shift) / 360.0
                 blue_sat = 1.0
-                blue_val = blue_brightness * blue_blend  # Brightness fades with distance
-                # Apply perceptual brightness correction so blue doesn't overpower stage
+                blue_val = blue_brightness * blue_blend
+                # Apply ITU BT.709 perceptual brightness correction
                 brightness_correction = LEDEffects.get_perceptual_brightness_correction(240.0 - hue_shift)
-                blue_val *= brightness_correction
-                r_f, g_f, b_f = colorsys.hsv_to_rgb(blue_hue, blue_sat, min(blue_val, 1.0))
+                blue_val = min(1.0, blue_val * brightness_correction)
+                r_f, g_f, b_f = colorsys.hsv_to_rgb(blue_hue, blue_sat, blue_val)
                 r_blue = int(r_f * 255)
                 g_blue = int(g_f * 255)
                 b_blue = int(b_f * 255)
