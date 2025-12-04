@@ -63,19 +63,45 @@ class LEDEffects:
     
     @staticmethod
     def get_perceptual_brightness_correction(hue_degrees):
-        """No correction - let brightness envelope handle overall brightness.
+        """Correct RGB brightness so all hues appear equally bright to human eye.
         
-        Perceptual brightness correction in HSV value space causes desaturation/washed-out colors.
-        Instead, we manage brightness through the audio envelope and edge intensity parameters.
-        Red dominance is achieved by controlling blue edge saturation/intensity separately.
+        Human eye sensitivity varies by wavelength (ITU BT.709 standard):
+        - Green (550nm): peak sensitivity = 1.0x
+        - Red (650nm): ~0.3x brightness perception
+        - Blue (470nm): ~0.11x brightness perception
+        
+        For equal perceived brightness, scale color output inversely to human perception:
+        - Red needs to be 3.3x brighter (1.0 / 0.3)
+        - Blue needs to be 9.0x brighter (1.0 / 0.11)
+        - Green stays at 1.0x (baseline)
         
         Args:
             hue_degrees: 0-360 hue value
             
         Returns:
-            brightness_multiplier: always 1.0 (no correction)
+            brightness_multiplier: correction factor for the given hue
         """
-        return 1.0
+        # Normalize hue to 0-1 range
+        hue_norm = hue_degrees / 360.0
+        
+        # Map hue ranges to colors:
+        # 0° = Red (0.0)
+        # 120° = Green (0.333)
+        # 240° = Blue (0.667)
+        
+        if hue_norm < 0.167:  # 0° to 60° = Red to Yellow
+            # Red (0x) to Yellow (blend)
+            # Red: 3.3x, Yellow has green so less correction
+            progress = hue_norm / 0.167  # 0 to 1 within red zone
+            return 3.3 - (progress * 2.3)  # 3.3 down to 1.0 over red range
+        elif hue_norm < 0.5:  # 60° to 180° = Yellow to Cyan (Green zone)
+            # Yellow to Green to Cyan - green dominant, needs minimal correction
+            return 1.0  # Green is baseline
+        else:  # 180° to 360° = Cyan to Blue to Red (Blue/Magenta zone)
+            # Cyan (blend) to Blue to Magenta/Red
+            # Blue: 9.0x brightness
+            progress = (hue_norm - 0.5) / 0.5  # 0 to 1 within blue zone
+            return 1.0 + (progress * 8.0)  # 1.0 up to 9.0 over blue range
     
     @staticmethod
     def frequency_spectrum(strips, features):
@@ -200,7 +226,10 @@ class LEDEffects:
                 red_hue = hue_shift / 360.0
                 red_sat = 1.0
                 red_val = red_brightness * red_blend * distance_factor  # Center dims slower than edges
-                r_f, g_f, b_f = colorsys.hsv_to_rgb(red_hue, red_sat, red_val)
+                # Apply perceptual brightness correction so red looks as bright as other colors
+                brightness_correction = LEDEffects.get_perceptual_brightness_correction(hue_shift)
+                red_val *= brightness_correction
+                r_f, g_f, b_f = colorsys.hsv_to_rgb(red_hue, red_sat, min(red_val, 1.0))
                 r_red = int(r_f * 255)
                 g_red = int(g_f * 255)
                 b_red = int(b_f * 255)
@@ -231,7 +260,10 @@ class LEDEffects:
                 blue_hue = (240.0 - hue_shift) / 360.0
                 blue_sat = 1.0
                 blue_val = blue_brightness * blue_blend  # Brightness fades with distance
-                r_f, g_f, b_f = colorsys.hsv_to_rgb(blue_hue, blue_sat, blue_val)
+                # Apply perceptual brightness correction so blue doesn't overpower stage
+                brightness_correction = LEDEffects.get_perceptual_brightness_correction(240.0 - hue_shift)
+                blue_val *= brightness_correction
+                r_f, g_f, b_f = colorsys.hsv_to_rgb(blue_hue, blue_sat, min(blue_val, 1.0))
                 r_blue = int(r_f * 255)
                 g_blue = int(g_f * 255)
                 b_blue = int(b_f * 255)
