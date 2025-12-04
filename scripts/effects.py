@@ -181,7 +181,8 @@ class LEDEffects:
                 band_idx, pos_in_band = 31, 0.5
             
             # Feather energy with adjacent bands (inlined for speed)
-            center_weight = 1.0 - abs(pos_in_band - 0.5) * 2.0
+            # Use triangular window with minimum weight to avoid zero at band edges
+            center_weight = max(0.25, 1.0 - abs(pos_in_band - 0.5) * 2.0)  # Min 0.25 even at edges
             feathered_energy = center_weight * float(spectrum[band_idx])
             
             if band_idx > 0:
