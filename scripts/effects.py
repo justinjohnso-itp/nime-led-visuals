@@ -173,21 +173,21 @@ class LEDEffects:
             else:
                 band_idx, pos_in_band = 31, 0.5
             
-            # Feather energy with adjacent bands - tight clustering around fundamental
+            # Feather energy with adjacent bands - TIGHT clustering around fundamental to emphasize it
             # Use steep triangular window (narrow peak) to concentrate around the fundamental
             center_weight = 1.0 - abs(pos_in_band - 0.5) * 2.0  # 1.0 at center, 0.0 at edges
             feathered_energy = center_weight * float(spectrum[band_idx])
 
-            # Moderate feathering: light adjacent bands (up to 25% max) for smooth coverage
-            # This ensures all center 13 LEDs light up for bass frequencies
+            # Minimal feathering: reduce adjacent band contribution to focus on fundamental
+            # Reduced from 25% to 12.5% max to make visualization tighter
             if band_idx > 0:
                 # Adjacent band blends when approaching edge (pos_in_band > 0.3)
-                prev_weight = 0.25 * max(0.0, (pos_in_band - 0.3) / 0.2)  # Ramps 0.0-0.25 as pos goes 0.3-0.50
+                prev_weight = 0.125 * max(0.0, (pos_in_band - 0.3) / 0.2)  # Ramps 0.0-0.125 as pos goes 0.3-0.50
                 feathered_energy += prev_weight * float(spectrum[band_idx - 1])
 
             if band_idx < 31:
                 # Adjacent band blends when approaching edge (pos_in_band < 0.7)
-                next_weight = 0.25 * max(0.0, (0.7 - pos_in_band) / 0.2)  # Ramps 0.25-0.0 as pos goes 0.50-0.70
+                next_weight = 0.125 * max(0.0, (0.7 - pos_in_band) / 0.2)  # Ramps 0.125-0.0 as pos goes 0.50-0.70
                 feathered_energy += next_weight * float(spectrum[band_idx + 1])
 
             feathered_energy = min(1.0, feathered_energy)

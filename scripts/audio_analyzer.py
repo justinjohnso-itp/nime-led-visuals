@@ -171,10 +171,46 @@ class AudioAnalyzer:
             bass_boost[i] = 2.0 - (i / 4.0) * 1.0
         spectrum_bands = spectrum_bands * bass_boost
         
-        # Harmonic suppression: DISABLED for now
-        # Previous implementation was detecting wrong fundamentals due to bass boost artifacts
-        # The global normalization now provides enough sharpness that we don't need this
+        # Harmonic suppression: Attenuate bands at integer multiples of the dominant frequency
+        # This makes the visualization center strongly on the fundamental
         harmonic_suppression = np.ones(NUM_SPECTRUM_BANDS)
+        
+        # Find dominant band BEFORE applying harmonic suppression
+        if np.sum(spectrum_bands) > 0.0:
+            temp_dominant_band = int(np.argmax(spectrum_bands))
+            fundamental_freq = 0.5 * (SPECTRUM_FREQS[temp_dominant_band] + SPECTRUM_FREQS[temp_dominant_band + 1])
+            
+            # Suppress harmonics: 2x, 3x, 4x, etc. the fundamental frequency
+            # More aggressive suppression for lower harmonics (2nd and 3rd are most prominent in instruments)
+            for band_idx in range(NUM_SPECTRUM_BANDS):
+                band_center_freq = 0.5 * (SPECTRUM_FREQS[band_idx] + SPECTRUM_FREQS[band_idx + 1])
+                
+                # Check if this band is a harmonic of the fundamental
+                if fundamental_freq > 0.0:
+                    # Check if it's close to 2x, 3x, 4x, 5x, etc.
+                    # Skip 1x (that's the fundamental itself)
+                    for harmonic_num in range(2, 16):  # Check up to 15th harmonic
+                        exact_harmonic_freq = fundamental_freq * harmonic_num
+                        
+                        # Measure how close this band center is to the harmonic
+                        freq_ratio = band_center_freq / exact_harmonic_freq
+                        
+                        # Suppress nearby bands within ±15% of the harmonic frequency
+                        if 0.85 <= freq_ratio <= 1.15:
+                            # More aggressive suppression: -12dB for 2nd harmonic, -8dB for 3rd+
+                            # This keeps the visualization highly centered on the fundamental
+                            if harmonic_num == 2:
+                                base_suppression_db = -12.0  # Strong suppression for 2nd harmonic
+                            else:
+                                base_suppression_db = -8.0  # Moderate suppression for 3rd and higher
+                            
+                            # Apply Gaussian falloff: full suppression at center, reduces at ±15% edges
+                            deviation = abs(freq_ratio - 1.0)  # 0.0 to 0.15
+                            suppression_db = base_suppression_db * (1.0 - (deviation / 0.15))
+                            suppression_linear = 10.0 ** (suppression_db / 20.0)
+                            harmonic_suppression[band_idx] = min(harmonic_suppression[band_idx], suppression_linear)
+                            break  # Only suppress for the closest harmonic
+        
         spectrum_bands = spectrum_bands * harmonic_suppression
         
         # Bass bleed: DISABLED for tight fundamental visualization
