@@ -171,8 +171,8 @@ class AudioAnalyzer:
             bass_boost[i] = 2.0 - (i / 4.0) * 1.0
         spectrum_bands = spectrum_bands * bass_boost
         
-        # Harmonic suppression: Attenuate bands at integer multiples of the dominant frequency
-        # This makes the visualization center strongly on the fundamental
+        # Harmonic suppression: EXTREME attenuation to isolate the fundamental frequency ONLY
+        # Goal: visualization shows ONE tight "group" with no harmonic energy visible
         harmonic_suppression = np.ones(NUM_SPECTRUM_BANDS)
         
         # Find dominant band BEFORE applying harmonic suppression
@@ -181,7 +181,7 @@ class AudioAnalyzer:
             fundamental_freq = 0.5 * (SPECTRUM_FREQS[temp_dominant_band] + SPECTRUM_FREQS[temp_dominant_band + 1])
             
             # Suppress harmonics: 2x, 3x, 4x, etc. the fundamental frequency
-            # More aggressive suppression for lower harmonics (2nd and 3rd are most prominent in instruments)
+            # EXTREME: -36dB for 2nd (zero it out), -30dB for 3rd, -24dB for 4th+
             for band_idx in range(NUM_SPECTRUM_BANDS):
                 band_center_freq = 0.5 * (SPECTRUM_FREQS[band_idx] + SPECTRUM_FREQS[band_idx + 1])
                 
@@ -195,23 +195,40 @@ class AudioAnalyzer:
                         # Measure how close this band center is to the harmonic
                         freq_ratio = band_center_freq / exact_harmonic_freq
                         
-                        # Suppress nearby bands within ±15% of the harmonic frequency
-                        if 0.85 <= freq_ratio <= 1.15:
-                            # More aggressive suppression: -12dB for 2nd harmonic, -8dB for 3rd+
-                            # This keeps the visualization highly centered on the fundamental
+                        # VERY TIGHT window: ±5% (tightest possible) - only suppress bands EXACTLY at harmonics
+                        # This prevents collateral suppression of non-harmonic frequencies
+                        if 0.95 <= freq_ratio <= 1.05:
+                            # EXTREME suppression - essentially zero out harmonics completely
                             if harmonic_num == 2:
-                                base_suppression_db = -12.0  # Strong suppression for 2nd harmonic
+                                base_suppression_db = -36.0  # Annihilate 2nd harmonic (most audible/problematic)
+                            elif harmonic_num == 3:
+                                base_suppression_db = -30.0  # Extreme suppression for 3rd (also very strong)
                             else:
-                                base_suppression_db = -8.0  # Moderate suppression for 3rd and higher
+                                base_suppression_db = -24.0  # Very aggressive for 4th and higher
                             
-                            # Apply Gaussian falloff: full suppression at center, reduces at ±15% edges
-                            deviation = abs(freq_ratio - 1.0)  # 0.0 to 0.15
-                            suppression_db = base_suppression_db * (1.0 - (deviation / 0.15))
+                            # Gaussian Gaussian window: full suppression at center, sharp fade at edges
+                            # Within ±5% window, apply gaussian-like suppression
+                            deviation = abs(freq_ratio - 1.0)  # 0.0 to 0.05
+                            # Gaussian decay: exp(-x^2 / (2 * sigma^2)) where sigma = 0.02
+                            gaussian = np.exp(-((deviation / 0.015) ** 2) / 2.0)
+                            suppression_db = base_suppression_db * gaussian
+                            
                             suppression_linear = 10.0 ** (suppression_db / 20.0)
                             harmonic_suppression[band_idx] = min(harmonic_suppression[band_idx], suppression_linear)
                             break  # Only suppress for the closest harmonic
         
         spectrum_bands = spectrum_bands * harmonic_suppression
+        
+        # Post-suppression cleanup: kill any band that's more than 3x the median energy
+        # This catches any harmonics that slipped through the net
+        non_zero_bands = spectrum_bands[spectrum_bands > 0.0001]
+        if len(non_zero_bands) > 5:
+            median_energy = float(np.median(non_zero_bands))
+            for i in range(NUM_SPECTRUM_BANDS):
+                # If a band is way higher than its neighbors (harmonic), suppress it
+                if spectrum_bands[i] > median_energy * 2.5 and i != temp_dominant_band:
+                    # Only suppress if it's not the dominant band
+                    spectrum_bands[i] *= 0.3  # Reduce outlier bands to 30% of their value
         
         # Bass bleed: DISABLED for tight fundamental visualization
         # The global normalization now handles bass prominence without spreading energy
