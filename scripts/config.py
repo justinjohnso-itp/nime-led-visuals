@@ -28,20 +28,21 @@ FREQ_BANDS = [
 ]
 
 # 32-band spectrum for smooth color mapping
-# Logarithmically spaced from 20 Hz to 20 kHz
+# Logarithmically spaced from instrument's frequency range (C1 to B8)
+# Instrument range: ~32.7 Hz (C1) to ~7040 Hz (B8)
 import numpy as np
 NUM_SPECTRUM_BANDS = 32
-SPECTRUM_FREQS = np.logspace(np.log10(20), np.log10(20000), NUM_SPECTRUM_BANDS + 1)
+SPECTRUM_FREQS = np.logspace(np.log10(32.7), np.log10(7040), NUM_SPECTRUM_BANDS + 1)
 
-# Legacy band definitions for compatibility
-BASS_LOW = 20
-BASS_HIGH = 250
-MID_LOW = 250
-MID_HIGH = 4000
-HIGH_LOW = 4000
-HIGH_HIGH = 20000
-FREQ_MIN = 20        # Sub-bass floor
-FREQ_MAX = 20000     # Treble ceiling
+# Legacy band definitions for compatibility (remapped to instrument range)
+BASS_LOW = 32.7      # C1 - lowest note on instrument
+BASS_HIGH = 250      # Upper bass range
+MID_LOW = 250        # Low-mid range
+MID_HIGH = 1000      # Mid range
+HIGH_LOW = 1000      # High range
+HIGH_HIGH = 7040     # B8 - highest note on instrument
+FREQ_MIN = 32.7      # Lowest playable note (C1)
+FREQ_MAX = 7040      # Highest playable note (B8)
 
 # Audio Input Scaling
 INPUT_GAIN = 15.0     # Librosa normalizes audio to quiet levels; use higher gain (15x)
