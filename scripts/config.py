@@ -28,20 +28,20 @@ FREQ_BANDS = [
 ]
 
 # 32-band spectrum for smooth color mapping
-# Logarithmically spaced from instrument's frequency range (C1 to B8)
-# Instrument range: ~32.7 Hz (C1) to ~7040 Hz (B8)
+# Logarithmically spaced from instrument's frequency range (20 Hz to 7040 Hz)
+# Extended lower range to capture 30s Hz frequencies from NIME controller
 import numpy as np
 NUM_SPECTRUM_BANDS = 32
-SPECTRUM_FREQS = np.logspace(np.log10(32.7), np.log10(7040), NUM_SPECTRUM_BANDS + 1)
+SPECTRUM_FREQS = np.logspace(np.log10(20), np.log10(7040), NUM_SPECTRUM_BANDS + 1)
 
 # Legacy band definitions for compatibility (remapped to instrument range)
-BASS_LOW = 32.7      # C1 - lowest note on instrument
+BASS_LOW = 20        # Extended lower limit (was C1 at 32.7 Hz)
 BASS_HIGH = 250      # Upper bass range
 MID_LOW = 250        # Low-mid range
 MID_HIGH = 1000      # Mid range
 HIGH_LOW = 1000      # High range
 HIGH_HIGH = 7040     # B8 - highest note on instrument
-FREQ_MIN = 32.7      # Lowest playable note (C1)
+FREQ_MIN = 20        # Extended to capture 30s Hz (was C1 at 32.7 Hz)
 FREQ_MAX = 7040      # Highest playable note (B8)
 
 # Audio Input Scaling

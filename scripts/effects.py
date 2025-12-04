@@ -144,28 +144,21 @@ class LEDEffects:
         band_boundaries[-1] = 1.0  # Ensure last boundary is exactly 1.0
         
         # Pre-compute band mapping for all LED positions
+        # Map band 0 (lowest freq) at center, band 31 (highest freq) at edges
+        # This creates a spread where bass is centered and treble extends outward
         band_map = []  # [(band_idx, pos_in_band), ...] for each position
         for pos in range(leds_per_side):
             if leds_per_side <= 1:
                 band_map.append((0, 0.5))
             else:
-                normalized_pos = min(1.0, pos / float(leds_per_side - 1))
+                # Map position linearly to band index, centered within bands
+                # pos=0 (center) starts in band 0, pos=215 (edge) in band 31
+                # Use (pos + 0.5) to center LEDs within their band ranges
+                band_frac = (pos + 0.5) * 31.0 / leds_per_side
+                band_idx = min(31, int(band_frac))
                 
-                # Binary search for band
-                band_idx = 0
-                for idx in range(32):
-                    if normalized_pos < band_boundaries[idx + 1] or idx == 31:
-                        band_idx = idx
-                        break
-                
-                # Position within band
-                band_start = band_boundaries[band_idx]
-                band_end = band_boundaries[band_idx + 1]
-                band_width = band_end - band_start
-                if band_width > 0:
-                    pos_in_band = (normalized_pos - band_start) / band_width
-                else:
-                    pos_in_band = 0.5
+                # Position within that band (0.0 at start, 1.0 at end)
+                pos_in_band = band_frac - band_idx
                 
                 band_map.append((band_idx, pos_in_band))
         
@@ -185,16 +178,16 @@ class LEDEffects:
             center_weight = 1.0 - abs(pos_in_band - 0.5) * 2.0  # 1.0 at center, 0.0 at edges
             feathered_energy = center_weight * float(spectrum[band_idx])
 
-            # Minimal feathering: only light adjacent bands (10% max) very near edges
-            # This creates a tight sweep band that follows the fundamental frequency
+            # Moderate feathering: light adjacent bands (up to 25% max) for smooth coverage
+            # This ensures all center 13 LEDs light up for bass frequencies
             if band_idx > 0:
-                # Adjacent band only blends when very close to edge (pos_in_band > 0.45)
-                prev_weight = 0.1 * max(0.0, (pos_in_band - 0.45) / 0.05)  # Ramps 0.0-0.1 as pos goes 0.45-0.50
+                # Adjacent band blends when approaching edge (pos_in_band > 0.3)
+                prev_weight = 0.25 * max(0.0, (pos_in_band - 0.3) / 0.2)  # Ramps 0.0-0.25 as pos goes 0.3-0.50
                 feathered_energy += prev_weight * float(spectrum[band_idx - 1])
 
             if band_idx < 31:
-                # Adjacent band only blends when very close to edge (pos_in_band < 0.55)
-                next_weight = 0.1 * max(0.0, (0.55 - pos_in_band) / 0.05)  # Ramps 0.1-0.0 as pos goes 0.50-0.55
+                # Adjacent band blends when approaching edge (pos_in_band < 0.7)
+                next_weight = 0.25 * max(0.0, (0.7 - pos_in_band) / 0.2)  # Ramps 0.25-0.0 as pos goes 0.50-0.70
                 feathered_energy += next_weight * float(spectrum[band_idx + 1])
 
             feathered_energy = min(1.0, feathered_energy)
