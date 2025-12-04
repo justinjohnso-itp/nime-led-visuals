@@ -62,8 +62,8 @@ class AudioAnalyzer:
             idx = np.where((self.spectrum_freqs >= low_f) & (self.spectrum_freqs < high_f))[0]
             self.spectrum_bins.append(idx if idx.size > 0 else None)
         
-        # Running max decay rate for 32-band spectrum (extremely slow to hold peaks)
-        self.spectrum_decay_rate = 0.99  # Extremely slow decay to hold frequency peaks
+        # Running max decay rate for 32-band spectrum (balance responsiveness with peak holding)
+        self.spectrum_decay_rate = 0.95  # Fast decay for responsiveness, slow enough to hold peaks
         
         # A-weighting curve for perceptual loudness (approximate)
         # Makes the spectrum reflect what's actually audible

@@ -143,68 +143,56 @@ class LEDEffects:
             band_boundaries.append(min(1.0, cumulative_log_width))  # Clamp to 1.0
         band_boundaries[-1] = 1.0  # Ensure last boundary is exactly 1.0
         
-        # Map each LED position to a band with feathering into adjacent bands
-        def get_feathered_band_energy(pos, leds_per_side, spectrum):
-            """Map LED position to blended energy from current band + adjacent bands
-            
-            Returns blended band energy with smooth feathering across band boundaries.
-            Each LED blends 50% with its center band and 25% each with adjacent bands.
-            """
-            # Normalize position to 0.0-1.0
+        # Pre-compute band mapping for all LED positions
+        band_map = []  # [(band_idx, pos_in_band), ...] for each position
+        for pos in range(leds_per_side):
             if leds_per_side <= 1:
-                return float(spectrum[0])
-            normalized_pos = min(1.0, pos / float(leds_per_side - 1))
-            
-            # Find which band this position falls into
-            band_idx = 0
-            for idx in range(32):
-                if normalized_pos < band_boundaries[idx + 1] or idx == 31:
-                    band_idx = idx
-                    break
-            
-            # Position within the band (0.0 = start, 1.0 = end)
-            band_start = band_boundaries[band_idx]
-            band_end = band_boundaries[band_idx + 1]
-            band_width = band_end - band_start
-            if band_width > 0:
-                pos_in_band = (normalized_pos - band_start) / band_width
+                band_map.append((0, 0.5))
             else:
-                pos_in_band = 0.5
-            
-            # Feather with adjacent bands: peak at 0.5, fade to 0 at edges
-            # Center band gets full weight (1.0 - distance from 0.5)
-            center_weight = 1.0 - abs(pos_in_band - 0.5) * 2.0  # 0.0 to 1.0
-            
-            blended_energy = center_weight * float(spectrum[band_idx])
-            
-            # Add contributions from adjacent bands
-            if band_idx > 0:
-                # Previous band: weight fades from 0.5 to 0 as we move away
-                prev_weight = max(0.0, 0.5 - pos_in_band)
-                blended_energy += prev_weight * float(spectrum[band_idx - 1])
-            
-            if band_idx < 31:
-                # Next band: weight fades from 0 to 0.5 as we move away
-                next_weight = max(0.0, (pos_in_band - 0.5))
-                blended_energy += next_weight * float(spectrum[band_idx + 1])
-            
-            return min(1.0, blended_energy)  # Clamp to 1.0
+                normalized_pos = min(1.0, pos / float(leds_per_side - 1))
+                
+                # Binary search for band
+                band_idx = 0
+                for idx in range(32):
+                    if normalized_pos < band_boundaries[idx + 1] or idx == 31:
+                        band_idx = idx
+                        break
+                
+                # Position within band
+                band_start = band_boundaries[band_idx]
+                band_end = band_boundaries[band_idx + 1]
+                band_width = band_end - band_start
+                if band_width > 0:
+                    pos_in_band = (normalized_pos - band_start) / band_width
+                else:
+                    pos_in_band = 0.5
+                
+                band_map.append((band_idx, pos_in_band))
         
         # Build full 432-LED array: mirrored spectrum from center outward
         leds = []
         for i in range(total_leds):
             dist_from_center = abs(i - center)
             
-            # Get feathered band energy (blended with adjacent bands)
-            feathered_energy = get_feathered_band_energy(dist_from_center, leds_per_side, spectrum)
+            # Look up pre-computed band mapping
+            if dist_from_center < leds_per_side:
+                band_idx, pos_in_band = band_map[dist_from_center]
+            else:
+                band_idx, pos_in_band = 31, 0.5
             
-            # Determine which band this LED is closest to (for hue mapping)
-            normalized_pos = min(1.0, dist_from_center / float(max(leds_per_side - 1, 1)))
-            band_idx = 0
-            for idx in range(32):
-                if normalized_pos < band_boundaries[idx + 1] or idx == 31:
-                    band_idx = idx
-                    break
+            # Feather energy with adjacent bands (inlined for speed)
+            center_weight = 1.0 - abs(pos_in_band - 0.5) * 2.0
+            feathered_energy = center_weight * float(spectrum[band_idx])
+            
+            if band_idx > 0:
+                prev_weight = max(0.0, 0.5 - pos_in_band)
+                feathered_energy += prev_weight * float(spectrum[band_idx - 1])
+            
+            if band_idx < 31:
+                next_weight = max(0.0, pos_in_band - 0.5)
+                feathered_energy += next_weight * float(spectrum[band_idx + 1])
+            
+            feathered_energy = min(1.0, feathered_energy)
             
             # Hue for this band: red (0°) at band 0, blue (240°) at band 31
             band_hue = LEDEffects.get_band_hue(band_idx)
