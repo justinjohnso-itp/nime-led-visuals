@@ -69,9 +69,9 @@ class LEDEffects:
         Uses inverse ITU BT.709 weighting: Y = 0.2126*R + 0.7152*G + 0.0722*B
         
         For red (1.0) perceived brightness = 0.2126, scale other colors:
-        - Red: 1.0x (baseline)
-        - Green: 0.297x (more sensitive eye perception)
-        - Blue: capped at 1.0x (even at max, blue is dimmer than red by nature)
+        - Red: 1.0x (baseline, boosted for bass prominence)
+        - Green: 0.25x (more sensitive eye perception, but lower bass rarely goes here)
+        - Blue: 0.5x (treble gets less emphasis to make bass more prominent)
         
         Args:
             hue_degrees: 0-360 hue value
@@ -82,26 +82,26 @@ class LEDEffects:
         # Normalize hue to 0-1
         hue_norm = hue_degrees / 360.0
         
-        # Pure red (0°) and magenta (300-360°) need full brightness
+        # Pure red (0°) and magenta (300-360°) need full brightness (bass emphasis)
         # Pure green (120°) needs to be dimmed
-        # Pure blue (240°) stays full (already dim by nature)
+        # Pure blue (240°) gets reduced brightness (less emphasis on treble)
         
-        if hue_norm < 0.083:  # 0-30°: Red to Orange (red dominant)
+        if hue_norm < 0.083:  # 0-30°: Red to Orange (red dominant, bass emphasis)
             # Linear blend from pure red (1.0) toward orange which has green
             progress = hue_norm / 0.083
-            return 1.0 - (progress * 0.7)  # 1.0 down to 0.3 over red range
+            return 1.0 - (progress * 0.75)  # 1.0 down to 0.25 over red range
         elif hue_norm < 0.417:  # 30-150°: Orange to Cyan (green dominant)
             # Green zone is most sensitive, needs heavy dimming
-            # Peak dimming at 120° (pure green at 0.297)
+            # Peak dimming at 120° (pure green at 0.25)
             progress = (hue_norm - 0.083) / 0.334  # 0 to 1 in green range
             # Use cosine curve to reach minimum at 120°
             import math
-            dimming = 0.297 + (0.7 * math.cos(progress * math.pi))
+            dimming = 0.25 + (0.75 * math.cos(progress * math.pi))
             return dimming
         else:  # 150-360°: Cyan to Magenta to Red (blue/red dominant)
-            # Blue and magenta back toward red
+            # Blue less bright, magenta back toward full red
             progress = (hue_norm - 0.417) / 0.583  # 0 to 1 in blue/red range
-            return 0.3 + (progress * 0.7)  # 0.3 up to 1.0
+            return 0.5 + (progress * 0.5)  # 0.5 up to 1.0 (blue at 0.5, magenta at 1.0)
     
     @staticmethod
     def frequency_spectrum(strips, features):

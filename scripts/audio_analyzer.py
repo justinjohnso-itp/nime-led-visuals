@@ -160,6 +160,37 @@ class AudioAnalyzer:
         for i, idx in enumerate(self.spectrum_bins):
             if idx is not None and len(idx) > 0:
                 spectrum_bands[i] = float(np.mean(spectrum_power[idx]))
+        
+        # Bass boost: low frequencies naturally quieter, enhance them for visualization
+        # Boost strongest at band 0, fade out by band 15
+        bass_boost = np.ones(NUM_SPECTRUM_BANDS)
+        for i in range(16):
+            # Linear ramp from 3.0x boost (band 0) to 1.0x (band 15)
+            bass_boost[i] = 3.0 - (i / 16.0) * 2.0
+        spectrum_bands = spectrum_bands * bass_boost
+        
+        # Harmonic suppression: suppress overtones relative to the detected fundamental
+        # Find the strongest band (fundamental frequency of the note being played)
+        fundamental_band = int(np.argmax(spectrum_bands))
+        
+        # Suppress harmonics (2x, 3x, 4x, 5x) of the fundamental frequency
+        harmonic_suppression = np.ones(NUM_SPECTRUM_BANDS)
+        harmonic_ratios = [2.0, 3.0, 4.0, 5.0]  # 2nd, 3rd, 4th, 5th harmonics
+        
+        for harmonic_ratio in harmonic_ratios:
+            harmonic_band = int(fundamental_band * harmonic_ratio)
+            if harmonic_band < NUM_SPECTRUM_BANDS:
+                # Suppress this harmonic band and its neighbors (±1 band width)
+                suppression_width = max(1, fundamental_band // 4)  # Band width depends on fundamental position
+                for offset in range(-suppression_width, suppression_width + 1):
+                    band_idx = harmonic_band + offset
+                    if 0 <= band_idx < NUM_SPECTRUM_BANDS:
+                        # Gaussian-shaped suppression centered on harmonic
+                        distance = abs(offset) / float(suppression_width + 1)
+                        suppression = 0.3 + (0.7 * np.exp(-distance * distance))  # 0.3 to 1.0
+                        harmonic_suppression[band_idx] *= suppression
+        
+        spectrum_bands = spectrum_bands * harmonic_suppression
 
         # Find dominant band BEFORE normalization (raw energy)
         total_band_energy = float(np.sum(spectrum_bands))

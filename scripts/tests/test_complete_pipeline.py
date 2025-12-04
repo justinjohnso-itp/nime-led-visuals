@@ -39,15 +39,16 @@ def test_pipeline():
     analyzer = AudioAnalyzer(sample_rate=sample_rate)
     
     # Test cases: (frequency_hz, name)
+    # Using instrument range: 32.7 Hz (C1) to 7040 Hz (B8)
     test_cases = [
-        (65, "Deep Bass"),
-        (200, "Bass/Sub"),
-        (500, "Low Mid"),
-        (1000, "Mid"),
-        (2000, "Upper Mid"),
-        (4000, "Presence"),
-        (8000, "High Mid"),
-        (12000, "Treble"),
+        (40, "Low Bass"),
+        (80, "Bass"),
+        (165, "Low Mid Bass"),
+        (330, "Mid Bass"),
+        (660, "Mid"),
+        (1320, "Upper Mid"),
+        (2640, "Presence"),
+        (5280, "High Presence"),
     ]
     
     print("\n" + "="*80)
