@@ -197,58 +197,72 @@ def main(audio_source='live', filepath=None):
             tonalness = shared_features.get('tonalness', 0.0)
             
             if spectrum is not None and len(spectrum) >= 32:
-                # Visualize red core and blue edges like the actual LED strips
-                bass_energy = float(np.mean(spectrum[0:10]))  # Bass energy for red core
-                treble_energy = float(np.mean(spectrum[22:32]))  # Treble energy for blue edges
+                # Visualize the actual 32-band spectrum with band-by-band brightness
+                # Match the algorithm in effects.frequency_spectrum() for accuracy
                 
-                # Calculate red core size and blue edge size (matching effects.py)
-                bass_core_size = int((NUM_LEDS_PER_STRIP * NUM_STRIPS / 2) * 0.85 * bass_energy)
-                edge_size = int((NUM_LEDS_PER_STRIP * NUM_STRIPS / 2) * 0.5 * (treble_energy ** 1.2))
+                total_leds = NUM_LEDS_PER_STRIP * NUM_STRIPS
+                center = total_leds // 2
+                leds_per_side = total_leds // 2
                 
-                # Compress 432 LEDs to ~54 chars for display (8:1 compression)
+                # Compress 216 LEDs per side to ~27 chars for display (8:1 compression)
                 compression = 8
-                display_width = (NUM_LEDS_PER_STRIP // compression)
+                display_width = (leds_per_side // compression)
                 
-                # Strip 0: Red from left, blue on far left edge
+                # Pre-compute brightness for each displayed position (matching effects.py exactly)
+                displayed_brightness = []
+                for display_i in range(display_width):
+                    # Map display position back to actual LED position
+                    led_pos = display_i * compression
+                    
+                    # Map position to band (matching band_map logic in effects.py)
+                    if leds_per_side <= 1:
+                        band_idx = 0
+                        pos_in_band = 0.5
+                    else:
+                        band_frac = (led_pos + 0.5) * 31.0 / leds_per_side
+                        band_idx = min(31, int(band_frac))
+                        pos_in_band = band_frac - band_idx
+                    
+                    # Calculate brightness with feathering (matching effects.py)
+                    distance_from_center = abs(pos_in_band - 0.5)
+                    center_weight = max(0.0, 1.0 - distance_from_center * 0.4)  # Gentle falloff
+                    feathered_energy = center_weight * float(spectrum[band_idx])
+                    
+                    # Feathering from adjacent bands
+                    if band_idx > 0:
+                        prev_weight = 0.50 * max(0.0, (pos_in_band - 0.0) / 0.50)
+                        feathered_energy += prev_weight * float(spectrum[band_idx - 1])
+                    if band_idx < 31:
+                        next_weight = 0.50 * max(0.0, (1.0 - pos_in_band) / 0.50)
+                        feathered_energy += next_weight * float(spectrum[band_idx + 1])
+                    
+                    if band_idx > 1:
+                        prev2_weight = 0.35 * max(0.0, (pos_in_band - 0.0) / 0.50)
+                        feathered_energy += prev2_weight * float(spectrum[band_idx - 2])
+                    if band_idx < 30:
+                        next2_weight = 0.35 * max(0.0, (1.0 - pos_in_band) / 0.50)
+                        feathered_energy += next2_weight * float(spectrum[band_idx + 2])
+                    
+                    displayed_brightness.append(min(1.0, feathered_energy))
+                
+                # Display: mirrored spectrum from center outward
                 output = "▐"
                 for i in range(display_width):
-                    scaled_i = i * compression
-                    dist_from_left = scaled_i
-                    if dist_from_left < edge_size:
-                        output += f"{BLUE}●{RESET}"
-                    elif dist_from_left < bass_core_size:
+                    brightness = displayed_brightness[i]
+                    if brightness > 0.7:
                         output += f"{RED}█{RESET}"
-                    else:
-                        output += "·"
-                output += "▐ "
-                
-                # Strip 1: Red core from center
-                output += "▐"
-                center = (NUM_LEDS_PER_STRIP // 2)
-                for i in range(display_width):
-                    scaled_i = i * compression
-                    dist_from_center = abs(scaled_i - center)
-                    if dist_from_center < bass_core_size:
-                        output += f"{RED}█{RESET}"
-                    else:
-                        output += "·"
-                output += "▐ "
-                
-                # Strip 2: Red from right, blue on far right edge
-                output += "▐"
-                for i in range(display_width):
-                    scaled_i = i * compression
-                    dist_from_right = NUM_LEDS_PER_STRIP - 1 - scaled_i
-                    if dist_from_right < edge_size:
-                        output += f"{BLUE}●{RESET}"
-                    elif dist_from_right < bass_core_size:
-                        output += f"{RED}█{RESET}"
+                    elif brightness > 0.4:
+                        output += f"{RED}▓{RESET}"
+                    elif brightness > 0.1:
+                        output += "░"
                     else:
                         output += "·"
                 output += "▐\n"
                 
-                # Second line: frequency and energy info
-                output += f"{dominant_freq:5.0f}Hz  T:{tonalness:.2f}  B:{bass_energy:.2f}  T:{treble_energy:.2f}     "
+                # Second line: frequency and spectrum stats
+                mean_spectrum = float(np.mean(spectrum))
+                max_spectrum = float(np.max(spectrum))
+                output += f"{dominant_freq:5.0f}Hz  T:{tonalness:.2f}  spectrum[avg:{mean_spectrum:.3f} max:{max_spectrum:.3f}]     "
             else:
                 output = "Waiting...                        "
             
