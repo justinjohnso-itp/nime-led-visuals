@@ -45,7 +45,7 @@ FREQ_MIN = 20        # Extended to capture 30s Hz (was C1 at 32.7 Hz)
 FREQ_MAX = 7040      # Highest playable note (B8)
 
 # Audio Input Scaling
-INPUT_GAIN = 15.0     # Librosa normalizes audio to quiet levels; use higher gain (15x)
+INPUT_GAIN = 100.0     # Aux cable input is often weak; increase to 100x for better signal
 
 # Colors (RGB tuples) - mapped to frequency bands
 COLORS = {
