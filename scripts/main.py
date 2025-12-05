@@ -245,18 +245,91 @@ def main(audio_source='live', filepath=None):
                     
                     displayed_brightness.append(min(1.0, feathered_energy))
                 
-                # Display: mirrored spectrum from center outward
-                output = "▐"
+                # Display: three strips (left, center, right) with actual LED colors
+                # Band 0 (bass/red) at center, Band 31 (treble/blue) at edges
+                from config import SPECTRUM_FREQS
+                
+                # Get hue for display position (matching effects.py)
+                def get_hue_for_display_pos(display_i):
+                    led_pos = display_i * compression
+                    band_frac = (led_pos + 0.5) * 31.0 / leds_per_side
+                    band_idx = min(31, int(band_frac))
+                    # Map band to hue (0° red at band 0, 240° blue at band 31)
+                    if band_idx < 16:
+                        return (band_idx / 16.0) * 30.0  # Red to orange
+                    else:
+                        return 180.0 + ((band_idx - 16) / 16.0) * 60.0  # Cyan to blue
+                
+                # Display three strips: left (center outward), center (mirrored), right (center outward)
+                output = ""
+                
+                # Left strip: positions 0 to display_width (center to edge)
+                output += "▐"
                 for i in range(display_width):
                     brightness = displayed_brightness[i]
+                    hue = get_hue_for_display_pos(i)
+                    
+                    # Pick color based on hue (red < 60°, blue > 150°)
+                    if hue < 90:  # Red/orange
+                        if brightness > 0.7:
+                            output += f"{RED}█{RESET}"
+                        elif brightness > 0.4:
+                            output += f"{RED}▓{RESET}"
+                        elif brightness > 0.1:
+                            output += f"{RED}░{RESET}"
+                        else:
+                            output += "·"
+                    else:  # Cyan/blue
+                        if brightness > 0.7:
+                            output += f"{BLUE}█{RESET}"
+                        elif brightness > 0.4:
+                            output += f"{BLUE}▓{RESET}"
+                        elif brightness > 0.1:
+                            output += f"{BLUE}░{RESET}"
+                        else:
+                            output += "·"
+                output += "▐ "
+                
+                # Center strip: mirrored (display_width to 0 and back)
+                output += "▐"
+                for i in range(display_width):
+                    brightness = displayed_brightness[i]
+                    # Bass (band 0) at center, so color is always red
                     if brightness > 0.7:
                         output += f"{RED}█{RESET}"
                     elif brightness > 0.4:
                         output += f"{RED}▓{RESET}"
                     elif brightness > 0.1:
-                        output += "░"
+                        output += f"{RED}░{RESET}"
                     else:
                         output += "·"
+                output += "▐ "
+                
+                # Right strip: positions display_width to 0 (mirrored, center to edge)
+                output += "▐"
+                for i in range(display_width):
+                    brightness = displayed_brightness[i]
+                    hue = get_hue_for_display_pos(i)
+                    
+                    # Pick color based on hue
+                    if hue < 90:  # Red/orange
+                        if brightness > 0.7:
+                            output += f"{RED}█{RESET}"
+                        elif brightness > 0.4:
+                            output += f"{RED}▓{RESET}"
+                        elif brightness > 0.1:
+                            output += f"{RED}░{RESET}"
+                        else:
+                            output += "·"
+                    else:  # Cyan/blue
+                        if brightness > 0.7:
+                            output += f"{BLUE}█{RESET}"
+                        elif brightness > 0.4:
+                            output += f"{BLUE}▓{RESET}"
+                        elif brightness > 0.1:
+                            output += f"{BLUE}░{RESET}"
+                        else:
+                            output += "·"
                 output += "▐\n"
                 
                 # Second line: frequency and spectrum stats
