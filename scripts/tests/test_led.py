@@ -14,9 +14,10 @@ print(f"Python: {sys.executable}")
 print(f"neopixel module: {neopixel.__file__}")
 print(f"Total LEDs: {TOTAL_LEDS} ({NUM_STRIPS} strips x {NUM_LEDS_PER_STRIP})")
 
-print(f"\nInitializing NeoPixel on GPIO 18 with {TOTAL_LEDS} LEDs...")
+print(f"\nInitializing NeoPixel on GPIO 21 (pin 40) with {TOTAL_LEDS} LEDs...")
 # Set brightness to 1.0 (max) - all brightness control is done in effects.py
-pixels = neopixel.NeoPixel(board.D18, TOTAL_LEDS, brightness=1.0, auto_write=False)
+# GPIO18 was damaged - using GPIO21 instead
+pixels = neopixel.NeoPixel(board.D21, TOTAL_LEDS, brightness=1.0, auto_write=False)
 print(f"✓ NeoPixel initialized, len(pixels) = {len(pixels)}")
 
 print("\nTest 1: Fill all LEDs red...")

@@ -6,7 +6,7 @@ NUM_STRIPS = 3
 LED_BRIGHTNESS = 0.85  # Applied in effects.py (perceptual correction) - NOT the hardware brightness parameter
 
 # GPIO Pin (BCM numbering)
-GPIO_PIN = 18  # All daisy-chained strips on GPIO 18
+GPIO_PIN = 21  # All daisy-chained strips on GPIO 21 (pin 40) - GPIO18 was damaged
 
 # Audio Configuration
 SAMPLE_RATE = 48000

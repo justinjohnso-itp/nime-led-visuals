@@ -91,10 +91,52 @@ All code is self-documented with docstrings and inline comments explaining the a
 
 ## Hardware
 
-- Raspberry Pi (GPIO 18 for LED data)
-- 3× WS2812B LED strips (144 LEDs each)
-- 5V power supply (30A recommended)
+- Raspberry Pi 3B+ or 4 (GPIO 21 for LED data, pin 40)
+- 3× WS2812B LED strips (144 LEDs each, daisy-chained)
+- 5V power supply (30A recommended for 432 LEDs)
 - USB audio interface
+
+### Wiring
+
+```
+LED Strip                         Raspberry Pi
+────────────────────────────────────────────────
+5V  ←── External 5V PSU (+)
+GND ←── External 5V PSU (-) ───── GND (pin 6)
+DIN ←── 330Ω resistor ─────────── GPIO21 (pin 40)
+```
+
+**Important:** Connect Pi GND to LED strip GND for common ground reference.
+
+### Safe Power Handling
+
+⚠️ **Never connect/disconnect GPIO while powered** - this can permanently damage GPIO pins.
+
+#### Power-Up Sequence
+1. Everything OFF
+2. Connect all wires (GND first, then data, then power)
+3. Power ON LED strip PSU
+4. Power ON Pi
+
+#### Power-Down Sequence
+1. Stop LED software (`Ctrl+C`)
+2. Shutdown Pi: `sudo shutdown -h now` (wait for green LED to stop)
+3. Power OFF LED strip PSU
+4. Disconnect wires
+
+#### Hardware Shutdown Button (Recommended)
+
+Add to `/boot/firmware/config.txt`:
+```
+dtoverlay=gpio-shutdown,gpio_pin=3
+dtoverlay=gpio-poweroff,gpiopin=26
+```
+
+Wire a momentary button between **Pin 5 (GPIO3)** and **Pin 6 (GND)**:
+- Press → Pi shuts down safely
+- Press again → Pi boots back up
+
+Optional: Wire an LED (with 330Ω resistor) to GPIO26 - lights up when safe to unplug.
 
 ## Project Context
 
