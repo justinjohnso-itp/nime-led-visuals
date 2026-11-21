@@ -57,31 +57,54 @@ def initialize_strips():
     return pixels, strips
 
 
-def audio_thread_func(audio, analyzer, shared_features, stop_event):
-    """Continuously read and analyze audio without waiting for LED updates
-    
-    Args:
-        audio: audio input source
-        analyzer: AudioAnalyzer instance
-        shared_features: dict to store latest features for LED thread
-        stop_event: threading.Event to signal shutdown
-    """
-    try:
-        while not stop_event.is_set():
-            # Read audio chunk
+def audio_thread_func(audio_source, filepath, analyzer, shared_features, stop_event):
+    """Continuously read and analyze audio, automatically reconnecting if USB/3.5mm audio is unplugged."""
+    audio = None
+    while not stop_event.is_set():
+        if audio is None:
+            try:
+                audio = get_audio_input(
+                    source=audio_source,
+                    filepath=filepath,
+                    sample_rate=SAMPLE_RATE,
+                    chunk_size=CHUNK_SIZE,
+                    device=AUDIO_INPUT_DEVICE,
+                )
+                shared_features['audio_connected'] = True
+                shared_features['audio_device'] = getattr(audio, 'device_name', audio_source)
+            except Exception as e:
+                shared_features['audio_connected'] = False
+                shared_features['audio_device'] = ''
+                shared_features['volume'] = 0.0
+                shared_features['raw_volume'] = 0.0
+                shared_features['spectrum'] = np.zeros(32)
+                print(f"⏳ Waiting for audio input device ({e})...")
+                stop_event.wait(2.0)
+                continue
+
+        try:
             chunk = audio.read_chunk()
-            
-            # Analyze audio features
             features = analyzer.analyze(chunk)
-            
-            # Store latest features (dict update is atomic in Python)
+            features['audio_connected'] = True
             shared_features.update(features)
-            
-            # No sleep - keep reading audio constantly
-    except Exception as e:
-        print(f"\n❌ Audio thread error: {e}")
-    finally:
-        audio.close()
+        except Exception as e:
+            print(f"\n⚠️  Audio stream interrupted ({e}), reconnecting...")
+            shared_features['audio_connected'] = False
+            shared_features['volume'] = 0.0
+            shared_features['raw_volume'] = 0.0
+            shared_features['spectrum'] = np.zeros(32)
+            try:
+                audio.close()
+            except Exception:
+                pass
+            audio = None
+            stop_event.wait(1.5)
+
+    if audio is not None:
+        try:
+            audio.close()
+        except Exception:
+            pass
 
 
 def led_thread_func(pixels, strips, shared_features, stop_event):
@@ -120,7 +143,7 @@ def led_thread_func(pixels, strips, shared_features, stop_event):
 
 
 def main(audio_source='live', filepath=None):
-    """Main loop with audio and LED threads
+    """Main loop with audio, LED, and web control threads
     
     Args:
         audio_source: 'file' or 'live'
@@ -134,19 +157,15 @@ def main(audio_source='live', filepath=None):
         pixels = None
         strips = None
 
-    print("🎵 Initializing audio input...")
-    audio = get_audio_input(source=audio_source, filepath=filepath, sample_rate=SAMPLE_RATE, chunk_size=CHUNK_SIZE, device=AUDIO_INPUT_DEVICE)
-
     print("📊 Initializing audio analyzer...")
     analyzer = AudioAnalyzer(sample_rate=SAMPLE_RATE)
     
-    # For file input, audio is pre-loaded by librosa - no playback needed
-    if audio_source == 'file':
-        print("🔊 Analyzing audio file...")
-
     # Shared state for communication between threads
     shared_features = {
+        'audio_connected': False,
+        'audio_device': '',
         'volume': 0.0,
+        'raw_volume': 0.0,
         'bass': 0.0,
         'mid': 0.0,
         'high': 0.0,
@@ -158,18 +177,26 @@ def main(audio_source='live', filepath=None):
         'bandwidth': 0.0,
         'transient': 0.0,
         'envelope': 0.0,
-        'spectrum': None,  # 32-band spectrum
+        'spectrum': np.zeros(32),
     }
     stop_event = threading.Event()
+
+    # Start live web control server FIRST so it is always reachable on power-on
+    # even before USB audio or 3.5mm cable is plugged in
+    web_server = None
+    try:
+        web_server = start_web_server(shared_features, stop_event, port=WEB_PORT)
+    except Exception as e:
+        print(f"⚠️  Could not start web server on port {WEB_PORT}: {e}")
 
     print("▶️  Starting audio-reactive visualization...")
     print("   Press Ctrl+C to stop")
     print()  # Extra line for spectrum display
 
-    # Start audio thread (continuous reading)
+    # Start audio thread (handles connection & hot-plug reconnection)
     audio_t = threading.Thread(
         target=audio_thread_func,
-        args=(audio, analyzer, shared_features, stop_event),
+        args=(audio_source, filepath, analyzer, shared_features, stop_event),
         daemon=True,
         name="AudioThread"
     )
@@ -184,13 +211,6 @@ def main(audio_source='live', filepath=None):
             name="LEDThread"
         )
         led_t.start()
-
-    # Start live web control server (HTTP + SSE on port 8080)
-    web_server = None
-    try:
-        web_server = start_web_server(shared_features, stop_event, port=WEB_PORT)
-    except Exception as e:
-        print(f"⚠️  Could not start web server on port {WEB_PORT}: {e}")
 
     # Main thread: print features and handle shutdown
     try:

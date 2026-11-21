@@ -647,7 +647,10 @@ HTML_PAGE = """<!DOCTYPE html>
         document.getElementById('tonalVal').textContent = Number(d.tonalness || 0).toFixed(2);
         document.getElementById('rmsVal').textContent = Number(d.raw_volume || d.volume || 0).toFixed(3);
         const gateEl = document.getElementById('gateIndicator');
-        if ((d.volume || 0) <= 0.0001) {
+        if (d.audio_connected === false) {
+          gateEl.textContent = 'WAITING FOR USB AUDIO / 3.5MM INPUT';
+          gateEl.style.color = '#ff9f0a';
+        } else if ((d.volume || 0) <= 0.0001) {
           gateEl.textContent = 'NOISE GATE MUTED';
           gateEl.style.color = '#828a9f';
         } else {
@@ -696,6 +699,8 @@ def build_state_payload(shared_features: dict[str, Any]) -> dict[str, Any]:
     ]
 
     return {
+        "audio_connected": bool(shared_features.get("audio_connected", True)),
+        "audio_device": str(shared_features.get("audio_device", "")),
         "volume": round(float(shared_features.get("volume", 0.0)), 4),
         "raw_volume": round(float(shared_features.get("raw_volume", shared_features.get("volume", 0.0))), 4),
         "dominant_freq": round(float(shared_features.get("dominant_freq", 0.0)), 1),
@@ -814,4 +819,20 @@ def start_web_server(
 
     hostname = socket.gethostname().removesuffix(".local")
     print(f"🌐 Live control UI available at: http://{hostname}.local:{port}/")
+
+    # When running as root on Raspberry Pi (via systemd), also bind port 80
+    # so http://nime-visuals.local works without typing :8080
+    if port == WEB_PORT and port != 80:
+        try:
+            server80 = ReusableThreadingHTTPServer((host, 80), Handler)
+            thread80 = threading.Thread(
+                target=lambda: server80.serve_forever(poll_interval=0.25),
+                daemon=True,
+                name="WebServerThreadPort80",
+            )
+            thread80.start()
+            print(f"🌐 Also listening on port 80:   http://{hostname}.local/")
+        except Exception:
+            pass
+
     return server

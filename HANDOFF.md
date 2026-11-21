@@ -4,7 +4,7 @@
 1. **Read this `HANDOFF.md` and `AGENTS.md` first.**
 2. **Verify live Pi status** over SSH (`ssh -i ~/.ssh/github_ed25519 admin@nime-visuals.local`):
    - Service: `sudo systemctl status nime-led-visuals`
-   - Web UI: `http://nime-visuals.local:8080/` (or `http://10.149.164.164:8080/`)
+   - Web UI: `http://nime-visuals.local/` (port `80`) or `http://nime-visuals.local:8080/` (port `8080`)
 3. **Fine-tune live parameters during soundcheck/set** if requested, or extend presets in `scripts/config.py` (`PRESETS`).
 
 ## What Was Accomplished & Verified
@@ -16,8 +16,10 @@
 - **LED Strip Real Estate Expansion for Roots (`scripts/effects.py`):**
   - Added spatial warp `warped_pos = norm_pos ** root_real_estate` (`default: 1.65`) so audible root bands (`0–20`, `<950 Hz`) occupy ~76% of the physical LEDs across the 3 daisy-chained strips instead of only half.
   - Added dynamic root cluster expansion so strong root notes widen up to `+35%` further across neighboring LEDs.
-- **Live Web Control UI & Visualizer (`scripts/web_server.py`, `scripts/main.py`, `scripts/config.py`):**
-  - Built zero-dependency `ThreadingHTTPServer` + Server-Sent Events (`/api/stream`, `/api/params`, `/api/init`, `/api/reset`) on port `8080`.
+- **Live Web Control UI & Power-On Resilience (`scripts/web_server.py`, `scripts/main.py`, `scripts/audio_input.py`, `scripts/shell/install-service.sh`):**
+  - Built zero-dependency `ThreadingHTTPServer` + Server-Sent Events (`/api/stream`, `/api/params`, `/api/init`, `/api/reset`) listening on **both port `80` and port `8080`**.
+  - Starts the web server **before** audio initialization and runs audio capture inside a self-healing hot-plug retry loop (`sd._terminate(); sd._initialize()`). Even if the Pi powers on before the `AB13X` USB audio dongle or 3.5mm cable is plugged in, the web UI comes up immediately on power-on and automatically connects to audio the moment the cable is inserted.
+  - Updated `nime-led-visuals.service` with `StartLimitIntervalSec=0` and `Restart=always` so systemd never stops restarting the service.
   - Real-time ~16 FPS canvas visualization of the 3 angled stage LED strips (`432 LEDs`) + `32-band` spectrum with root-zone highlight, telemetry, 4 live presets (`Live Music Roots`, `Punchy Band Mix`, `Massive Root Bloom`, `NIME Original`), and 14 live sliders persisted to `runtime_params.json`.
 - **Verification Evidence:**
   - Local tests passed: `test_complete_pipeline.py`, `test_spectrum_viz.py`, `test_40hz_isolation.py`, plus HTTP/SSE endpoint integration checks.

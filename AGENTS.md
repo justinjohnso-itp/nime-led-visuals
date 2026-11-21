@@ -315,7 +315,8 @@ Pi Power
 - [T-e66c5294-d8e5-4e01-aeb5-22cf3410a095](https://ampcode.com/threads/T-e66c5294-d8e5-4e01-aeb5-22cf3410a095) - GPIO18 damage diagnosis after hot-unplug crash, LED strip only showing first 2 LEDs
 
 ### Phase 9: Live Music Root Weighting & Web Control UI (Current — see `HANDOFF.md`)
-- Added live HTTP + SSE web control UI (`scripts/web_server.py` on port `8080`, `http://nime-visuals.local:8080/`) for phone/laptop monitoring and live parameter tuning (`runtime_params.json`).
+- Added live HTTP + SSE web control UI (`scripts/web_server.py` on both port `80` and port `8080`, `http://nime-visuals.local/` and `http://nime-visuals.local:8080/`) for phone/laptop monitoring and live parameter tuning (`runtime_params.json`).
+- Made power-on startup resilient to unplugged USB/3.5mm audio: `main.py` starts the web server before audio init, and `audio_thread_func` + `LiveAudioInput` auto-retry PortAudio initialization every 2s until the USB dongle / 3.5mm jack is connected.
 - Tuned `scripts/audio_analyzer.py` and `scripts/effects.py` for live music: weighted audible root frequencies (`40–950 Hz`, `root_focus=0.80`) with peak-relative root dominance contrast, and warped physical LED strip mapping (`root_real_estate=1.65`) so root frequencies command ~75% of the LED strip real estate.
 
 Completely refactored to display a **mirrored logarithmic frequency spectrum** across the LED strip.

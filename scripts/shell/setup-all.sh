@@ -170,19 +170,20 @@ sudo tee "$SERVICE_FILE" >/dev/null <<EOF
 Description=NIME LED Visuals - Audio-reactive LED visualization
 After=network.target sound.target
 Wants=network.target
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=${INSTALL_DIR}
 ExecStart=${PIXI_PYTHON} ${INSTALL_DIR}/scripts/main.py
-Restart=on-failure
-RestartSec=5
+Restart=always
+RestartSec=3
 StandardOutput=journal
 StandardError=journal
 
 # Give audio hardware time to initialize
-ExecStartPre=/bin/sleep 3
+ExecStartPre=/bin/sleep 2
 
 [Install]
 WantedBy=multi-user.target

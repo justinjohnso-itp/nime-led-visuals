@@ -138,10 +138,18 @@ class LiveAudioInput(AudioInput):
             print("Error: sounddevice not installed. Run: pixi add sounddevice")
             raise
 
+        # Re-initialize PortAudio so hot-plugged USB audio devices / 3.5mm jack-sense are detected
+        try:
+            sd._terminate()
+            sd._initialize()
+        except Exception:
+            pass
+
         # Resolve device by name pattern, index, or auto-select
         # Allow mono devices (1 channel) - most USB audio interfaces are mono
         resolved_device = _select_input_device(device, sd, min_input_channels=1)
         dev_info = sd.query_devices(resolved_device)
+        self.device_name = str(dev_info.get("name", f"Device {resolved_device}"))
         channels = min(2, dev_info["max_input_channels"])
 
         print(f"Opening audio device [{resolved_device}] '{dev_info['name']}' with {channels} channels...")
