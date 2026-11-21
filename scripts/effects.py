@@ -5,7 +5,8 @@ import numpy as np
 from config import (
     COLORS, NUM_LEDS_PER_STRIP, NUM_STRIPS, LED_BRIGHTNESS,
     HUE_RANGE, EDGE_HUE_SHIFT, CORE_FRACTION_MIN, CORE_FRACTION_MAX,
-    MIN_BRIGHTNESS, EDGE_FADE_RATE, TRANSIENT_BOOST, BRIGHTNESS_EXPONENT, FREQ_BANDS
+    MIN_BRIGHTNESS, EDGE_FADE_RATE, TRANSIENT_BOOST, BRIGHTNESS_EXPONENT, FREQ_BANDS,
+    get_live_params,
 )
 
 
@@ -33,33 +34,43 @@ class LEDEffects:
             else:
                 strip[i] = (0, 0, 0)
 
-    # Class-level state for smoothing
+    # Class-level state for smoothing and live web preview
     _prev_hue = 0.0
     _prev_brightness = 0.0
     _prev_edge = 0.0
     _prev_bass = 0.0  # Track bass intensity separately for faster decay
+    last_leds = [(0, 0, 0)] * (NUM_LEDS_PER_STRIP * NUM_STRIPS)
     
     @staticmethod
-    def get_band_hue(band_index):
+    def get_band_hue(band_index, bass_hue=0.0, treble_hue=240.0):
         """Map band index 0-31 to smooth hue gradient emphasizing reds and blues.
         
         Red/Orange (bass) → Blue/Cyan (treble), skipping muddy yellow/green midtones.
         
         Args:
             band_index: 0-31 spectrum band index
+            bass_hue: center hue in degrees (default 0.0)
+            treble_hue: outer edge hue in degrees (default 240.0)
             
         Returns:
             hue: 0-360 degrees
         """
-        # Emphasize warm reds/oranges and cool blues, skip yellow/green
+        # Emphasize warm reds/oranges and cool blues, skip yellow/green when at default palette
+        if abs(bass_hue - 0.0) < 0.5 and abs(treble_hue - 240.0) < 0.5:
+            if band_index < 16:
+                # Bands 0-15: Red (0°) to Orange (30°) - bass/mid warmth
+                return (band_index / 16.0) * 30.0
+            else:
+                # Bands 16-31: Cyan (180°) to Blue (240°) - high-mid/treble cool
+                return 180.0 + ((band_index - 16) / 16.0) * 60.0
+
+        # Custom user-selected bass → treble hue palette
         if band_index < 16:
-            # Bands 0-15: Red (0°) to Orange (30°) - bass/mid warmth
-            # 16 bands spread over only 30° for rich reds
-            return (band_index / 16.0) * 30.0
+            return (bass_hue + (band_index / 16.0) * 30.0) % 360.0
         else:
-            # Bands 16-31: Cyan (180°) to Blue (240°) - high-mid/treble cool
-            # 16 bands spread over 60° of blue spectrum (cyan to deep blue)
-            return 180.0 + ((band_index - 16) / 16.0) * 60.0
+            progress = (band_index - 16) / 16.0
+            start_cool = (treble_hue - 60.0) % 360.0
+            return (start_cool + progress * 60.0) % 360.0
     
     @staticmethod
     def get_perceptual_brightness_correction(hue_degrees):
@@ -143,18 +154,29 @@ class LEDEffects:
             band_boundaries.append(min(1.0, cumulative_log_width))  # Clamp to 1.0
         band_boundaries[-1] = 1.0  # Ensure last boundary is exactly 1.0
         
+        params = get_live_params()
+        master_brightness = float(params.get("brightness", LED_BRIGHTNESS))
+        response_intensity = float(params.get("response_intensity", 1.15))
+        easing_exponent = float(params.get("easing_exponent", 1.25))
+        cluster_width = float(params.get("cluster_width", 1.10))
+        root_focus = float(params.get("root_focus", 0.80))
+        root_real_estate = float(params.get("root_real_estate", 1.65))
+        bass_hue = float(params.get("bass_hue", 0.0))
+        treble_hue = float(params.get("treble_hue", 240.0))
+        perceptual_blend = float(params.get("perceptual_correction", 1.0))
+
         # Pre-compute band mapping for all LED positions
         # Map band 0 (lowest freq) at center, band 31 (highest freq) at edges
-        # This creates a spread where bass is centered and treble extends outward
+        # root_real_estate > 1.0 warps physical strip space so audible root bands (0-20)
+        # get up to ~75% of the physical LEDs across the 3 strips
         band_map = []  # [(band_idx, pos_in_band), ...] for each position
         for pos in range(leds_per_side):
             if leds_per_side <= 1:
                 band_map.append((0, 0.5))
             else:
-                # Map position linearly to band index, centered within bands
-                # pos=0 (center) starts in band 0, pos=215 (edge) in band 31
-                # Use (pos + 0.5) to center LEDs within their band ranges
-                band_frac = (pos + 0.5) * 31.0 / leds_per_side
+                norm_pos = (pos + 0.5) / leds_per_side
+                warped_pos = norm_pos ** max(0.5, root_real_estate)
+                band_frac = warped_pos * 31.0
                 band_idx = min(31, int(band_frac))
                 
                 # Position within that band (0.0 at start, 1.0 at end)
@@ -173,65 +195,78 @@ class LEDEffects:
             else:
                 band_idx, pos_in_band = 31, 0.5
             
+            # Dynamic root expansion: audible root bands (bands 0-20, <950 Hz) expand wider
+            # when they carry strong defining energy
+            root_zone_factor = max(0.0, 1.0 - (band_idx / 22.0))
+            local_peak_energy = float(spectrum[band_idx])
+            effective_cluster = cluster_width * (1.0 + 0.35 * root_focus * root_zone_factor * local_peak_energy)
+
             # Create an EXTRA-WIDE frequency "group" with 4x the original LED count
             # Blend across FOUR levels of adjacent bands for a massive, cohesive visual cluster
             # The fundamental band gets peak brightness, spreads far to adjacent bands
             distance_from_center = abs(pos_in_band - 0.5)  # 0.0 at center, 0.5 at edges
             # Minimal falloff: (1 - 0.2*x) to keep energy distributed across very wide group
             # Brightness stays at 0.8 even at band edges, spreading energy very far
-            center_weight = max(0.0, 1.0 - distance_from_center * 0.4)  # Very gentle falloff 1.0→0.8
-            feathered_energy = center_weight * float(spectrum[band_idx])
+            falloff_rate = 0.4 if effective_cluster >= 1.0 else (0.4 + (1.0 - effective_cluster) * 1.2)
+            center_weight = max(0.0, 1.0 - distance_from_center * falloff_rate)  # Very gentle falloff 1.0→0.8
+            feathered_energy = center_weight * local_peak_energy
 
             # EXTREMELY aggressive feathering: blend 4 levels of adjacent bands
-            # This creates a massive visual cluster that's 4x the original width (2x previous)
-            # Goal: twice as many LEDs lit compared to the already-doubled width
+            # Scaled by effective_cluster (1.0 = default 4x wide blob, 0.0 = single band, >1.0 = wider)
+            w1 = 0.50 * effective_cluster
+            w2 = 0.35 * effective_cluster
+            w3 = 0.20 * effective_cluster
+            w4 = 0.10 * effective_cluster
             
-            # First adjacent bands: very high contribution (50% max)
-            if band_idx > 0:
-                prev_weight = 0.50 * max(0.0, (pos_in_band - 0.0) / 0.50)  # Full range blend
+            # First adjacent bands: very high contribution (50% max at default)
+            if band_idx > 0 and w1 > 0.0:
+                prev_weight = w1 * max(0.0, (pos_in_band - 0.0) / 0.50)  # Full range blend
                 feathered_energy += prev_weight * float(spectrum[band_idx - 1])
 
-            if band_idx < 31:
-                next_weight = 0.50 * max(0.0, (1.0 - pos_in_band) / 0.50)  # Full range blend
+            if band_idx < 31 and w1 > 0.0:
+                next_weight = w1 * max(0.0, (1.0 - pos_in_band) / 0.50)  # Full range blend
                 feathered_energy += next_weight * float(spectrum[band_idx + 1])
             
-            # Second adjacent bands: high contribution (35% max)
-            if band_idx > 1:
-                prev2_weight = 0.35 * max(0.0, (pos_in_band - 0.0) / 0.50)
+            # Second adjacent bands: high contribution (35% max at default)
+            if band_idx > 1 and w2 > 0.0:
+                prev2_weight = w2 * max(0.0, (pos_in_band - 0.0) / 0.50)
                 feathered_energy += prev2_weight * float(spectrum[band_idx - 2])
 
-            if band_idx < 30:
-                next2_weight = 0.35 * max(0.0, (1.0 - pos_in_band) / 0.50)
+            if band_idx < 30 and w2 > 0.0:
+                next2_weight = w2 * max(0.0, (1.0 - pos_in_band) / 0.50)
                 feathered_energy += next2_weight * float(spectrum[band_idx + 2])
             
-            # Third adjacent bands: moderate contribution (20% max) - NEW LAYER
-            if band_idx > 2:
-                prev3_weight = 0.20 * max(0.0, (pos_in_band - 0.0) / 0.50)
+            # Third adjacent bands: moderate contribution (20% max at default)
+            if band_idx > 2 and w3 > 0.0:
+                prev3_weight = w3 * max(0.0, (pos_in_band - 0.0) / 0.50)
                 feathered_energy += prev3_weight * float(spectrum[band_idx - 3])
 
-            if band_idx < 29:
-                next3_weight = 0.20 * max(0.0, (1.0 - pos_in_band) / 0.50)
+            if band_idx < 29 and w3 > 0.0:
+                next3_weight = w3 * max(0.0, (1.0 - pos_in_band) / 0.50)
                 feathered_energy += next3_weight * float(spectrum[band_idx + 3])
             
-            # Fourth adjacent bands: light contribution (10% max) - NEW LAYER
-            if band_idx > 3:
-                prev4_weight = 0.10 * max(0.0, (pos_in_band - 0.0) / 0.50)
+            # Fourth adjacent bands: light contribution (10% max at default)
+            if band_idx > 3 and w4 > 0.0:
+                prev4_weight = w4 * max(0.0, (pos_in_band - 0.0) / 0.50)
                 feathered_energy += prev4_weight * float(spectrum[band_idx - 4])
 
-            if band_idx < 28:
-                next4_weight = 0.10 * max(0.0, (1.0 - pos_in_band) / 0.50)
+            if band_idx < 28 and w4 > 0.0:
+                next4_weight = w4 * max(0.0, (1.0 - pos_in_band) / 0.50)
                 feathered_energy += next4_weight * float(spectrum[band_idx + 4])
 
-            feathered_energy = min(1.0, feathered_energy)
+            feathered_energy = min(1.0, feathered_energy * response_intensity)
+            if feathered_energy > 0.0 and abs(easing_exponent - 1.0) > 0.01:
+                feathered_energy = feathered_energy ** easing_exponent
 
             # Hue for this band: red (0°) at band 0, blue (240°) at band 31
-            band_hue = LEDEffects.get_band_hue(band_idx)
+            band_hue = LEDEffects.get_band_hue(band_idx, bass_hue=bass_hue, treble_hue=treble_hue)
             
-            # Brightness = feathered energy scaled by LED_BRIGHTNESS
-            band_brightness = feathered_energy * LED_BRIGHTNESS
+            # Brightness = feathered energy scaled by master_brightness
+            band_brightness = feathered_energy * master_brightness
             
             # Apply perceptual brightness correction for this hue
-            brightness_correction = LEDEffects.get_perceptual_brightness_correction(band_hue)
+            raw_correction = LEDEffects.get_perceptual_brightness_correction(band_hue)
+            brightness_correction = (1.0 - perceptual_blend) + (perceptual_blend * raw_correction)
             band_brightness = min(1.0, band_brightness * brightness_correction)
             
             # Convert HSV to RGB
@@ -243,11 +278,15 @@ class LEDEffects:
             
             leds.append((r, g, b))
         
-        # Write to all three strips
-        for strip_idx, strip in enumerate(strips):
-            for led_idx in range(NUM_LEDS_PER_STRIP):
-                absolute_idx = strip_idx * NUM_LEDS_PER_STRIP + led_idx
-                strip[led_idx] = leds[absolute_idx]
+        LEDEffects.last_leds = leds
+
+        # Write to all three strips if hardware/mock strips are provided
+        if strips is not None:
+            for strip_idx, strip in enumerate(strips):
+                for led_idx in range(NUM_LEDS_PER_STRIP):
+                    absolute_idx = strip_idx * NUM_LEDS_PER_STRIP + led_idx
+                    strip[led_idx] = leds[absolute_idx]
+        return leds
 
     @staticmethod
     def pulse_effect(strip, volume, color=(255, 255, 255)):

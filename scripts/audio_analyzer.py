@@ -16,6 +16,7 @@ from config import (
     NUM_SPECTRUM_BANDS,
     SPECTRUM_FREQS,
     BRIGHTNESS_EXPONENT,
+    get_live_params,
 )
 
 
@@ -75,6 +76,35 @@ class AudioAnalyzer:
         # A-weighting curve for perceptual loudness (approximate)
         # Makes the spectrum reflect what's actually audible
         self.a_weight = self._compute_a_weight(self.spectrum_freqs)
+
+        # Audible root frequency weighting curve across the 32 bands
+        # Emphasizes musical fundamentals (40 Hz - 900 Hz) and attenuates high overtone/cymbal wash
+        self.root_weight_curve = self._compute_root_weight_curve()
+
+    def _compute_root_weight_curve(self):
+        """Compute perceptual root-note weighting curve for the 32 logarithmic bands."""
+        curve = np.ones(NUM_SPECTRUM_BANDS, dtype=np.float32)
+        for i in range(NUM_SPECTRUM_BANDS):
+            fc = 0.5 * (SPECTRUM_FREQS[i] + SPECTRUM_FREQS[i + 1])
+            if fc < 38.0:
+                # Sub-bass rumble control (20-38 Hz): gentle ramp into audible bass roots
+                curve[i] = 0.90 + 0.50 * ((fc - 20.0) / 18.0)
+            elif fc <= 350.0:
+                # Primary bass & fundamental root zone (38-350 Hz): peak emphasis
+                curve[i] = 1.75
+            elif fc <= 950.0:
+                # Midrange chord/vocal/lead root zone (350-950 Hz): strong root presence
+                progress = (np.log10(fc) - np.log10(350.0)) / (np.log10(950.0) - np.log10(350.0))
+                curve[i] = 1.75 - 0.55 * progress  # 1.75 -> 1.20
+            elif fc <= 2200.0:
+                # Upper melody / lower harmonics (950-2200 Hz): smooth roll-off
+                progress = (np.log10(fc) - np.log10(950.0)) / (np.log10(2200.0) - np.log10(950.0))
+                curve[i] = 1.20 - 0.65 * progress  # 1.20 -> 0.55
+            else:
+                # High overtones, hi-hats, sibilance (2200-7040 Hz): keep subtle so roots dominate
+                progress = (np.log10(fc) - np.log10(2200.0)) / (np.log10(7040.0) - np.log10(2200.0))
+                curve[i] = max(0.25, 0.55 - 0.30 * progress)  # 0.55 -> 0.25
+        return curve
     
     def _compute_a_weight(self, freqs):
         """Compute A-weighting curve for perceptual loudness"""
@@ -105,21 +135,32 @@ class AudioAnalyzer:
         if audio.ndim > 1:
             audio = np.mean(audio, axis=-1)
 
+        params = get_live_params()
+        input_gain = float(params.get("input_gain", INPUT_GAIN))
+        noise_gate = float(params.get("noise_gate", NOISE_GATE_THRESHOLD))
+        attack_speed = float(params.get("attack_speed", 0.60))
+        decay_speed = float(params.get("decay_speed", 0.20))
+        peak_hold_decay = float(params.get("peak_hold_decay", self.spectrum_decay_rate))
+        harmonic_supp_strength = float(params.get("harmonic_suppression", 0.85))
+        bass_boost_max = float(params.get("bass_boost", 2.2))
+        root_focus = float(params.get("root_focus", 0.80))
+
         # Apply input gain
-        audio = audio * INPUT_GAIN
+        audio = audio * input_gain
 
         # Volume (RMS)
         volume = float(np.sqrt(np.mean(audio ** 2))) if audio.size > 0 else 0.0
 
         # Noise gate - if below threshold, return silence
-        if volume < NOISE_GATE_THRESHOLD:
+        if volume < noise_gate:
             # Decay envelope and spectrum, snap to zero when very small
             self.envelope_value *= 0.85
             if self.envelope_value < 0.01:
                 self.envelope_value = 0.0
-            self.prev_spectrum *= 0.9
+            self.prev_spectrum *= max(0.0, 1.0 - decay_speed * 0.5)
             return {
                 "volume": 0.0,
+                "raw_volume": volume,
                 "bass": 0.0,
                 "mid": 0.0,
                 "high": 0.0,
@@ -173,17 +214,22 @@ class AudioAnalyzer:
         # CONSERVATIVE boost to keep spectrum tight around fundamental
         bass_boost = np.ones(NUM_SPECTRUM_BANDS)
         for i in range(4):
-            # Conservative ramp from 2.0x boost (band 0) to 1.0x (band 3)
-            # Minimal boost = tight visualization around fundamental
-            bass_boost[i] = 2.0 - (i / 4.0) * 1.0
+            # Ramp from bass_boost_max (band 0) to 1.0x (band 4)
+            bass_boost[i] = bass_boost_max - (i / 4.0) * (bass_boost_max - 1.0)
         spectrum_bands = spectrum_bands * bass_boost
+
+        # Audible root frequency weighting (live music tuning):
+        # Emphasizes defining root fundamentals (40-950 Hz) over high overtone/cymbal wash
+        if root_focus > 0.0:
+            effective_root_curve = 1.0 + root_focus * (self.root_weight_curve - 1.0)
+            spectrum_bands = spectrum_bands * np.maximum(0.15, effective_root_curve)
         
         # Harmonic suppression: EXTREME attenuation to isolate the fundamental frequency ONLY
         # Goal: visualization shows ONE tight "group" with no harmonic energy visible
         harmonic_suppression = np.ones(NUM_SPECTRUM_BANDS)
         
         # Find dominant band BEFORE applying harmonic suppression
-        if np.sum(spectrum_bands) > 0.0:
+        if np.sum(spectrum_bands) > 0.0 and harmonic_supp_strength > 0.0:
             temp_dominant_band = int(np.argmax(spectrum_bands))
             fundamental_freq = 0.5 * (SPECTRUM_FREQS[temp_dominant_band] + SPECTRUM_FREQS[temp_dominant_band + 1])
             
@@ -207,13 +253,13 @@ class AudioAnalyzer:
                         if 0.95 <= freq_ratio <= 1.05:
                             # EXTREME suppression - essentially zero out harmonics completely
                             if harmonic_num == 2:
-                                base_suppression_db = -36.0  # Annihilate 2nd harmonic (most audible/problematic)
+                                base_suppression_db = -36.0 * harmonic_supp_strength
                             elif harmonic_num == 3:
-                                base_suppression_db = -30.0  # Extreme suppression for 3rd (also very strong)
+                                base_suppression_db = -30.0 * harmonic_supp_strength
                             else:
-                                base_suppression_db = -24.0  # Very aggressive for 4th and higher
+                                base_suppression_db = -24.0 * harmonic_supp_strength
                             
-                            # Gaussian Gaussian window: full suppression at center, sharp fade at edges
+                            # Gaussian window: full suppression at center, sharp fade at edges
                             # Within ±5% window, apply gaussian-like suppression
                             deviation = abs(freq_ratio - 1.0)  # 0.0 to 0.05
                             # Gaussian decay: exp(-x^2 / (2 * sigma^2)) where sigma = 0.02
@@ -223,22 +269,25 @@ class AudioAnalyzer:
                             suppression_linear = 10.0 ** (suppression_db / 20.0)
                             harmonic_suppression[band_idx] = min(harmonic_suppression[band_idx], suppression_linear)
                             break  # Only suppress for the closest harmonic
+        else:
+            temp_dominant_band = int(np.argmax(spectrum_bands)) if np.sum(spectrum_bands) > 0.0 else -1
         
         spectrum_bands = spectrum_bands * harmonic_suppression
         
         # Post-suppression cleanup: kill any band that's way above neighbors (escaped harmonics)
         # This catches harmonics that slipped through the ±5% detection window, especially at high frequencies
         non_zero_bands = spectrum_bands[spectrum_bands > 0.0001]
-        if len(non_zero_bands) > 5:
+        if len(non_zero_bands) > 5 and harmonic_supp_strength > 0.0:
             median_energy = float(np.median(non_zero_bands))
             # More aggressive threshold: 2.0x median instead of 2.5x to catch more harmonics
             harmonic_threshold = median_energy * 2.0
+            outlier_mult = 1.0 - (0.9 * harmonic_supp_strength)  # 0.1 when strength=1.0, 1.0 when strength=0.0
             
             for i in range(NUM_SPECTRUM_BANDS):
                 # Check if this band is much higher than median (likely an escaped harmonic)
                 if spectrum_bands[i] > harmonic_threshold and i != temp_dominant_band:
                     # Extra aggressive: reduce escaped harmonics to 10% (was 30%)
-                    spectrum_bands[i] *= 0.1
+                    spectrum_bands[i] *= outlier_mult
         
         # Bass bleed: DISABLED for tight fundamental visualization
         # The global normalization now handles bass prominence without spreading energy
@@ -256,7 +305,7 @@ class AudioAnalyzer:
             tonalness = 0.0
 
         # Update running max with decay (slower for 32-band spectrum to capture sustained notes)
-        self.spectrum_max = np.maximum(spectrum_bands, self.spectrum_max * self.spectrum_decay_rate)
+        self.spectrum_max = np.maximum(spectrum_bands, self.spectrum_max * peak_hold_decay)
 
         # Normalize using GLOBAL max (not per-band) to keep spectral peaks sharp
         # This ensures the fundamental frequency stands out from harmonics/noise
@@ -272,14 +321,18 @@ class AudioAnalyzer:
                 spectrum_norm[i] = 0.0
         
         spectrum_norm = np.clip(spectrum_norm, 0.0, 1.0)
-        
-        # NOTE: Gamma compression was tried here but it lifted suppressed harmonics
-        # back to visible levels, undoing the harmonic suppression work.
-        # Keep spectrum_norm as-is; brightness is handled by LED_BRIGHTNESS.
+
+        # Root dominance contrast: push down secondary spectral wash in live mixes
+        # while keeping the defining root frequency peak(s) at full strength
+        if root_focus > 0.0:
+            frame_peak = float(np.max(spectrum_norm))
+            if frame_peak > 0.01:
+                dominance_exp = 1.0 + (0.95 * root_focus)
+                spectrum_norm = frame_peak * ((spectrum_norm / frame_peak) ** dominance_exp)
 
         # Smooth with previous frame (reduces flickering)
-        attack = 0.6
-        decay = 0.2
+        attack = attack_speed
+        decay = decay_speed
         for i in range(NUM_SPECTRUM_BANDS):
             if spectrum_norm[i] > self.prev_spectrum[i]:
                 self.prev_spectrum[i] += (spectrum_norm[i] - self.prev_spectrum[i]) * attack
@@ -355,6 +408,7 @@ class AudioAnalyzer:
 
         return {
             "volume": volume,
+            "raw_volume": volume,
             "bass": band_norms.get("bass", 0.0),
             "mid": mid,
             "high": high,

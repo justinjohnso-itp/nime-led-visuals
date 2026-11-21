@@ -208,5 +208,5 @@ __marimo__/
 
 .DS_Store
 
-# Development guidance (local to agent sessions)
-AGENTS.md
+# Runtime live tuning state
+runtime_params.json

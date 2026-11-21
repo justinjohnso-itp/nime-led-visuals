@@ -9,16 +9,17 @@ import numpy as np
 import subprocess
 import os
 
-from config import NUM_LEDS_PER_STRIP, NUM_STRIPS, LED_BRIGHTNESS, SAMPLE_RATE, CHUNK_SIZE, AUDIO_INPUT_DEVICE
+from config import NUM_LEDS_PER_STRIP, NUM_STRIPS, LED_BRIGHTNESS, SAMPLE_RATE, CHUNK_SIZE, AUDIO_INPUT_DEVICE, WEB_PORT
 from audio_input import get_audio_input
 from audio_analyzer import AudioAnalyzer
+from effects import LEDEffects
+from web_server import start_web_server
 
-# Only import LED libraries on Linux (Raspberry Pi)
+# Only import LED hardware libraries on Linux (Raspberry Pi)
 if platform.system() == 'Linux':
     import board
     import neopixel
     from adafruit_led_animation.helper import PixelSubset
-    from effects import LEDEffects
     HAS_LEDS = True
 else:
     HAS_LEDS = False
@@ -184,9 +185,18 @@ def main(audio_source='live', filepath=None):
         )
         led_t.start()
 
+    # Start live web control server (HTTP + SSE on port 8080)
+    web_server = None
+    try:
+        web_server = start_web_server(shared_features, stop_event, port=WEB_PORT)
+    except Exception as e:
+        print(f"⚠️  Could not start web server on port {WEB_PORT}: {e}")
+
     # Main thread: print features and handle shutdown
     try:
         while True:
+            if not HAS_LEDS:
+                LEDEffects.frequency_spectrum(None, shared_features)
             spectrum = shared_features.get('spectrum', None)
             
             # ANSI colors
@@ -309,6 +319,11 @@ def main(audio_source='live', filepath=None):
     except KeyboardInterrupt:
         print("\n⏹️  Stopping...")
         stop_event.set()
+        if web_server is not None:
+            try:
+                web_server.shutdown()
+            except Exception:
+                pass
         
         # Wait for threads to finish
         audio_t.join(timeout=2.0)

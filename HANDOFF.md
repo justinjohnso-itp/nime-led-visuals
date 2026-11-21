@@ -1,0 +1,35 @@
+# Handoff — Live Music Root Tuning & Web Control UI
+
+## Next Steps (For Next Agent)
+1. **Read this `HANDOFF.md` and `AGENTS.md` first.**
+2. **Verify live Pi status** over SSH (`ssh -i ~/.ssh/github_ed25519 admin@nime-visuals.local`):
+   - Service: `sudo systemctl status nime-led-visuals`
+   - Web UI: `http://nime-visuals.local:8080/` (or `http://10.149.164.164:8080/`)
+3. **Fine-tune live parameters during soundcheck/set** if requested, or extend presets in `scripts/config.py` (`PRESETS`).
+
+## What Was Accomplished & Verified
+- **Hardware & Wiring Verified:** Confirmed single USB power + ground harness from Pi USB port + GPIO 21 (physical pin 40) data line works cleanly without ground-reference flicker. Added `~/.ssh/github_ed25519.pub` to `admin@nime-visuals.local:~/.ssh/authorized_keys`.
+- **Audible Root Frequency Weighting (`scripts/audio_analyzer.py`):**
+  - Added `_compute_root_weight_curve()` controlled by live `root_focus` parameter (`default: 0.80`).
+  - Boosts audible musical root fundamentals (`38–950 Hz`, bands `0–20` up to `1.75x`), rolls off upper mids (`950–2200 Hz`), and attenuates high overtone/cymbal wash (`>2200 Hz` down to `0.25x`).
+  - Added peak-relative root dominance contrast (`(spectrum_norm / frame_peak) ** (1 + 0.95 * root_focus)`) so defining root notes command the visual field during full live mixes while keeping peaks at `1.0`.
+- **LED Strip Real Estate Expansion for Roots (`scripts/effects.py`):**
+  - Added spatial warp `warped_pos = norm_pos ** root_real_estate` (`default: 1.65`) so audible root bands (`0–20`, `<950 Hz`) occupy ~76% of the physical LEDs across the 3 daisy-chained strips instead of only half.
+  - Added dynamic root cluster expansion so strong root notes widen up to `+35%` further across neighboring LEDs.
+- **Live Web Control UI & Visualizer (`scripts/web_server.py`, `scripts/main.py`, `scripts/config.py`):**
+  - Built zero-dependency `ThreadingHTTPServer` + Server-Sent Events (`/api/stream`, `/api/params`, `/api/init`, `/api/reset`) on port `8080`.
+  - Real-time ~16 FPS canvas visualization of the 3 angled stage LED strips (`432 LEDs`) + `32-band` spectrum with root-zone highlight, telemetry, 4 live presets (`Live Music Roots`, `Punchy Band Mix`, `Massive Root Bloom`, `NIME Original`), and 14 live sliders persisted to `runtime_params.json`.
+- **Verification Evidence:**
+  - Local tests passed: `test_complete_pipeline.py`, `test_spectrum_viz.py`, `test_40hz_isolation.py`, plus HTTP/SSE endpoint integration checks.
+  - Synced to Pi (`/home/admin/Code/nime-led-visuals`), restarted `nime-led-visuals.service`, and verified `http://127.0.0.1:8080/api/init` and `active (running)` systemd status on `nime-visuals.local`.
+
+## Decisions & Rationale
+- **Zero-dependency stdlib HTTP + SSE server:** Avoids installing Flask/FastAPI on the 1 GB RAM Pi 3B or mutating `pixi.lock` before a live show.
+- **Thread-safe `LIVE_PARAMS` with JSON persistence (`runtime_params.json`):** Allows slider tweaks from phone/laptop to survive service restarts without dirtying git-tracked files.
+
+## Learning Checkpoint (Not Saved; Promotion Not Approved)
+- **Candidate:** When driving WS2812B strips on Raspberry Pi alongside a live web control UI, downsample LED preview frames (3:1, 432 -> 144 pixels at ~16 Hz over SSE) so mobile browsers render smoothly without starving the 60 FPS `rpi_ws281x` DMA thread.
+
+## Git & Deployment State
+- **Worktree:** `/Users/justin/Dropbox/NYU/semester-3-2025-fall/new-interfaces-for-musical-expression/nime-led-visuals` (`main` branch, pushed to `origin/main`).
+- **Pi Checkout:** `/home/admin/Code/nime-led-visuals` synced with latest code and running via `nime-led-visuals.service`.

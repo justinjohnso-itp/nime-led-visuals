@@ -84,3 +84,163 @@ CORE_FRACTION_MAX = 0.5      # Maximum core width (50%, narrower for more edge b
 MIN_BRIGHTNESS = 0.0         # Fully off when silent
 EDGE_FADE_RATE = 0.25        # Brightness fades to 75% at edges for more visible edge bleed
 TRANSIENT_BOOST = 0.5        # Extra brightness boost for sudden volume increases (increased)
+
+# Web Server Configuration
+WEB_PORT = 8080
+
+# Live Runtime Tunable Parameters (shared across threads, editable via Web UI)
+import json
+import os
+import threading
+
+_PARAMS_LOCK = threading.Lock()
+_RUNTIME_PARAMS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "runtime_params.json")
+
+DEFAULT_LIVE_PARAMS = {
+    "brightness": float(LED_BRIGHTNESS),       # Master LED brightness (0.0 - 1.0)
+    "response_intensity": 1.15,                # Pre-easing energy multiplier (0.1 - 3.0)
+    "easing_exponent": 1.25,                   # Easing curve gamma: <1 softer/wider, 1 linear, >1 punchier peaks (0.25 - 3.5)
+    "cluster_width": 1.10,                     # Adjacent band feathering multiplier (0.0 - 2.5)
+    "root_focus": 0.80,                        # Weighting toward audible root frequencies 40-900Hz & root dominance (0.0 - 1.5)
+    "root_real_estate": 1.65,                  # Spatial warp giving audible roots more physical LED strip real estate (1.0 - 2.8)
+    "input_gain": float(INPUT_GAIN),           # Audio input gain multiplier (0.5 - 80.0)
+    "noise_gate": float(NOISE_GATE_THRESHOLD), # Silence RMS threshold (0.0 - 0.25)
+    "attack_speed": 0.65,                      # Spectrum rise smoothing factor (0.02 - 1.0)
+    "decay_speed": 0.22,                       # Spectrum falloff smoothing factor (0.01 - 0.95)
+    "peak_hold_decay": 0.82,                   # Running max decay rate per frame (0.40 - 0.995)
+    "harmonic_suppression": 0.85,              # Suppresses overtones so root fundamentals dominate (0.0 - 1.0)
+    "bass_boost": 2.2,                         # Low-frequency root boost (0.5 - 5.0)
+    "bass_hue": 0.0,                           # Center (low freq) hue in degrees (0 - 360)
+    "treble_hue": 240.0,                       # Edge (high freq) hue in degrees (0 - 360)
+    "perceptual_correction": 1.0,              # Blend factor for perceptual luminance dimming (0.0 - 1.0)
+}
+
+PRESETS = {
+    "live_roots": {
+        "label": "Live Music Roots (Default)",
+        "description": "Weights audible root notes (40–900 Hz) heavily and gives them ~75% of the LED strip real estate",
+        "params": dict(DEFAULT_LIVE_PARAMS),
+    },
+    "live_band_punchy": {
+        "label": "Punchy Band Mix",
+        "description": "Fast transient attack, high contrast easing curve, strong bass/mid root lock for loud full bands",
+        "params": {
+            **DEFAULT_LIVE_PARAMS,
+            "response_intensity": 1.25,
+            "easing_exponent": 1.55,
+            "cluster_width": 1.0,
+            "root_focus": 0.95,
+            "root_real_estate": 1.80,
+            "harmonic_suppression": 0.75,
+            "attack_speed": 0.78,
+            "decay_speed": 0.30,
+            "input_gain": 12.0,
+        },
+    },
+    "wide_root_bloom": {
+        "label": "Massive Root Bloom",
+        "description": "Extra-wide root clusters that fill the strips with smooth, weighty movement",
+        "params": {
+            **DEFAULT_LIVE_PARAMS,
+            "brightness": 0.95,
+            "response_intensity": 1.30,
+            "easing_exponent": 0.90,
+            "cluster_width": 1.45,
+            "root_focus": 1.0,
+            "root_real_estate": 1.95,
+            "attack_speed": 0.45,
+            "decay_speed": 0.12,
+        },
+    },
+    "nime_linear": {
+        "label": "NIME Original (Linear)",
+        "description": "Original unwarped 32-band mapping for single-instrument sweeps",
+        "params": {
+            **DEFAULT_LIVE_PARAMS,
+            "response_intensity": 1.0,
+            "easing_exponent": 1.0,
+            "cluster_width": 1.0,
+            "root_focus": 0.0,
+            "root_real_estate": 1.0,
+            "harmonic_suppression": 1.0,
+            "bass_boost": 2.0,
+            "attack_speed": 0.60,
+            "decay_speed": 0.20,
+            "peak_hold_decay": 0.80,
+        },
+    },
+}
+
+LIVE_PARAMS = dict(DEFAULT_LIVE_PARAMS)
+
+
+def load_live_params() -> dict:
+    """Load persisted runtime parameters if present."""
+    with _PARAMS_LOCK:
+        if os.path.exists(_RUNTIME_PARAMS_FILE):
+            try:
+                with open(_RUNTIME_PARAMS_FILE, "r", encoding="utf-8") as f:
+                    saved = json.load(f)
+                for k, default_val in DEFAULT_LIVE_PARAMS.items():
+                    if k in saved and isinstance(saved[k], (int, float)):
+                        LIVE_PARAMS[k] = float(saved[k])
+            except Exception as e:
+                print(f"Warning: could not load runtime_params.json: {e}")
+        return dict(LIVE_PARAMS)
+
+
+def get_live_params() -> dict:
+    """Return a snapshot copy of current live parameters."""
+    with _PARAMS_LOCK:
+        return dict(LIVE_PARAMS)
+
+
+def update_live_params(updates: dict, persist: bool = True) -> dict:
+    """Validate, clamp, and apply live parameter updates."""
+    bounds = {
+        "brightness": (0.0, 1.0),
+        "response_intensity": (0.1, 3.0),
+        "easing_exponent": (0.25, 3.5),
+        "cluster_width": (0.0, 2.5),
+        "root_focus": (0.0, 1.5),
+        "root_real_estate": (1.0, 2.8),
+        "input_gain": (0.5, 80.0),
+        "noise_gate": (0.0, 0.25),
+        "attack_speed": (0.02, 1.0),
+        "decay_speed": (0.01, 0.95),
+        "peak_hold_decay": (0.40, 0.995),
+        "harmonic_suppression": (0.0, 1.0),
+        "bass_boost": (0.5, 5.0),
+        "bass_hue": (0.0, 360.0),
+        "treble_hue": (0.0, 360.0),
+        "perceptual_correction": (0.0, 1.0),
+    }
+    with _PARAMS_LOCK:
+        for k, v in updates.items():
+            if k in DEFAULT_LIVE_PARAMS and isinstance(v, (int, float)):
+                lo, hi = bounds.get(k, (-1e9, 1e9))
+                LIVE_PARAMS[k] = float(max(lo, min(hi, float(v))))
+        if persist:
+            try:
+                with open(_RUNTIME_PARAMS_FILE, "w", encoding="utf-8") as f:
+                    json.dump(LIVE_PARAMS, f, indent=2)
+            except Exception as e:
+                print(f"Warning: could not save runtime_params.json: {e}")
+        return dict(LIVE_PARAMS)
+
+
+def reset_live_params(persist: bool = True) -> dict:
+    """Reset all live parameters to DEFAULT_LIVE_PARAMS."""
+    with _PARAMS_LOCK:
+        LIVE_PARAMS.clear()
+        LIVE_PARAMS.update(DEFAULT_LIVE_PARAMS)
+        if persist and os.path.exists(_RUNTIME_PARAMS_FILE):
+            try:
+                os.remove(_RUNTIME_PARAMS_FILE)
+            except Exception:
+                pass
+        return dict(LIVE_PARAMS)
+
+
+load_live_params()
+
