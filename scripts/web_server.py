@@ -18,6 +18,7 @@ from config import (
     PRESETS,
     SPECTRUM_FREQS,
     WEB_PORT,
+    get_active_preset,
     get_live_params,
     reset_live_params,
     update_live_params,
@@ -152,17 +153,43 @@ HTML_PAGE = """<!DOCTYPE html>
     cursor: pointer;
     text-align: left;
     transition: all 0.15s ease;
+    position: relative;
   }
   .preset-btn:hover, .preset-btn:active {
     background: var(--panel-hi);
     border-color: var(--accent);
   }
+  .preset-btn.active {
+    background: rgba(48, 209, 88, 0.11);
+    border-color: var(--ok);
+    box-shadow: 0 0 16px rgba(48, 209, 88, 0.18);
+  }
+  .preset-btn .p-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
   .preset-btn .p-title {
     font-family: var(--font-mono);
     font-size: 0.78rem;
     font-weight: 700;
-    margin-bottom: 3px;
     color: #fff;
+  }
+  .preset-btn .p-badge {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--ok);
+    color: #050806;
+    display: none;
+    letter-spacing: 0.04em;
+  }
+  .preset-btn.active .p-badge {
+    display: inline-block;
   }
   .preset-btn .p-desc {
     font-size: 0.68rem;
@@ -272,6 +299,7 @@ HTML_PAGE = """<!DOCTYPE html>
       <h1>NIME // LIVE LIGHT ENGINE</h1>
     </div>
     <div class="telemetry">
+      <span>PRESET <b id="activePresetLabel" style="color: var(--ok);">--</b></span>
       <span>ROOT <b id="domFreq">-- Hz</b></span>
       <span>TONAL <b id="tonalVal">0.00</b></span>
       <span>RMS <b id="rmsVal">0.00</b></span>
@@ -370,12 +398,36 @@ HTML_PAGE = """<!DOCTYPE html>
         <input type="range" id="ctrl_bass_boost" min="0.5" max="5.0" step="0.1" data-key="bass_boost">
         <div class="control-hint">Extra lift for deep kick &amp; sub-bass fundamentals (20–80 Hz)</div>
       </div>
+      <div class="control-row">
+        <div class="control-label">
+          <span class="control-name">Idle Floor-Guard Brightness</span>
+          <span class="control-val" id="val_idle_brightness">0.35</span>
+        </div>
+        <input type="range" id="ctrl_idle_brightness" min="0.0" max="1.0" step="0.02" data-key="idle_brightness">
+        <div class="control-hint">Safety perimeter &amp; wave/comet motion when no band is playing so nobody steps on the strips</div>
+      </div>
+      <div class="control-row">
+        <div class="control-label">
+          <span class="control-name">Auto Floor-Guard Delay</span>
+          <span class="control-val" id="val_idle_timeout">4.0s</span>
+        </div>
+        <input type="range" id="ctrl_idle_timeout" min="0.5" max="30.0" step="0.5" data-key="idle_timeout">
+        <div class="control-hint">Seconds of silence before Floor Guard automatically fades in</div>
+      </div>
     </div>
 
     <div class="group-card">
       <div class="group-title">
-        <span>Audio Input &amp; Dynamics</span>
+        <span>Audio Input &amp; Anti-Spike</span>
         <span>ENVELOPE</span>
+      </div>
+      <div class="control-row">
+        <div class="control-label">
+          <span class="control-name">Spike / Flash Suppression</span>
+          <span class="control-val" id="val_spike_suppression">0.80</span>
+        </div>
+        <input type="range" id="ctrl_spike_suppression" min="0.0" max="1.0" step="0.05" data-key="spike_suppression">
+        <div class="control-hint">Rejects isolated 1-frame noise pops &amp; softens near-gate flashes during chill audio</div>
       </div>
       <div class="control-row">
         <div class="control-label">
@@ -388,10 +440,10 @@ HTML_PAGE = """<!DOCTYPE html>
       <div class="control-row">
         <div class="control-label">
           <span class="control-name">Noise Gate Threshold</span>
-          <span class="control-val" id="val_noise_gate">0.010</span>
+          <span class="control-val" id="val_noise_gate">0.025</span>
         </div>
         <input type="range" id="ctrl_noise_gate" min="0.0" max="0.15" step="0.002" data-key="noise_gate">
-        <div class="control-hint">Mutes LEDs when stage/room noise is below this RMS level</div>
+        <div class="control-hint">Mutes audio reactivity below this RMS level (transitions to Floor Guard)</div>
       </div>
       <div class="control-row">
         <div class="control-label">
@@ -462,18 +514,34 @@ HTML_PAGE = """<!DOCTYPE html>
   const specCtx = specCanvas.getContext('2d');
 
   let bandFreqs = [];
+  let presetsCatalog = {};
+  let activePresetId = null;
   let currentParams = {};
   let isDragging = false;
   let updateTimer = null;
 
   function formatVal(key, val) {
     if (key === 'bass_hue' || key === 'treble_hue') return Math.round(val) + '°';
+    if (key === 'idle_timeout') return Number(val).toFixed(1) + 's';
     if (key === 'noise_gate') return Number(val).toFixed(3);
     if (key === 'input_gain') return Number(val).toFixed(1) + 'x';
     return Number(val).toFixed(2);
   }
 
-  function syncSliders(params) {
+  function syncActivePreset(presetId, presetLabel) {
+    activePresetId = presetId || null;
+    const badge = document.getElementById('activePresetLabel');
+    if (badge) {
+      badge.textContent = presetLabel || (presetId && presetsCatalog[presetId] ? presetsCatalog[presetId].label : 'Custom');
+      badge.style.color = activePresetId ? 'var(--ok)' : 'var(--accent-cool)';
+    }
+    document.querySelectorAll('.preset-btn[data-preset-id]').forEach(btn => {
+      const id = btn.getAttribute('data-preset-id');
+      btn.classList.toggle('active', id === activePresetId);
+    });
+  }
+
+  function syncSliders(params, presetId, presetLabel) {
     currentParams = Object.assign({}, params);
     document.querySelectorAll('input[type=range][data-key]').forEach(el => {
       const k = el.getAttribute('data-key');
@@ -483,6 +551,9 @@ HTML_PAGE = """<!DOCTYPE html>
         if (valEl) valEl.textContent = formatVal(k, params[k]);
       }
     });
+    if (presetId !== undefined || presetLabel !== undefined) {
+      syncActivePreset(presetId, presetLabel);
+    }
   }
 
   function sendParamUpdate(patch) {
@@ -491,7 +562,7 @@ HTML_PAGE = """<!DOCTYPE html>
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch)
     }).then(r => r.json()).then(data => {
-      if (data.params) syncSliders(data.params);
+      if (data.params) syncSliders(data.params, data.active_preset, data.active_preset_label);
     }).catch(() => {});
   }
 
@@ -511,23 +582,32 @@ HTML_PAGE = """<!DOCTYPE html>
   document.getElementById('resetBtn').addEventListener('click', () => {
     fetch('/api/reset', { method: 'POST' })
       .then(r => r.json())
-      .then(data => { if (data.params) syncSliders(data.params); });
+      .then(data => { if (data.params) syncSliders(data.params, data.active_preset, data.active_preset_label); });
   });
 
   function renderPresets(presets) {
+    presetsCatalog = presets || {};
     const bar = document.getElementById('presetsBar');
     bar.innerHTML = '';
     Object.entries(presets).forEach(([id, preset]) => {
       const btn = document.createElement('button');
       btn.className = 'preset-btn';
-      btn.innerHTML = `<div class="p-title">${preset.label}</div><div class="p-desc">${preset.description}</div>`;
+      btn.setAttribute('data-preset-id', id);
+      btn.innerHTML = `<div class="p-head"><div class="p-title">${preset.label}</div><span class="p-badge">ACTIVE</span></div><div class="p-desc">${preset.description}</div>`;
       btn.addEventListener('click', () => {
         isDragging = false;
-        sendParamUpdate(preset.params);
-        syncSliders(preset.params);
+        // If clicking Force Floor Guard while it is already active, toggle back to Live Music Roots
+        if (id === 'floor_safety_standby' && activePresetId === 'floor_safety_standby' && presets.live_roots) {
+          sendParamUpdate(presets.live_roots.params);
+          syncSliders(presets.live_roots.params, 'live_roots', presets.live_roots.label);
+        } else {
+          sendParamUpdate(preset.params);
+          syncSliders(preset.params, id, preset.label);
+        }
       });
       bar.appendChild(btn);
     });
+    syncActivePreset(activePresetId);
   }
 
   function drawStageLEDs(leds) {
@@ -633,7 +713,7 @@ HTML_PAGE = """<!DOCTYPE html>
   fetch('/api/init').then(r => r.json()).then(data => {
     if (data.band_freqs) bandFreqs = data.band_freqs;
     if (data.presets) renderPresets(data.presets);
-    if (data.params) syncSliders(data.params);
+    if (data.params) syncSliders(data.params, data.active_preset, data.active_preset_label);
   });
 
   function connectSSE() {
@@ -648,18 +728,25 @@ HTML_PAGE = """<!DOCTYPE html>
         document.getElementById('rmsVal').textContent = Number(d.raw_volume || d.volume || 0).toFixed(3);
         const gateEl = document.getElementById('gateIndicator');
         if (d.audio_connected === false) {
-          gateEl.textContent = 'WAITING FOR USB AUDIO / 3.5MM INPUT';
+          gateEl.textContent = 'FLOOR GUARD (WAITING FOR AUDIO)';
+          gateEl.style.color = '#ff9f0a';
+        } else if (d.idle_active) {
+          gateEl.textContent = (d.params && d.params.force_idle >= 0.5)
+            ? 'FLOOR GUARD LOCKED (MANUAL)'
+            : 'FLOOR GUARD STANDBY (NO BAND)';
           gateEl.style.color = '#ff9f0a';
         } else if ((d.volume || 0) <= 0.0001) {
-          gateEl.textContent = 'NOISE GATE MUTED';
+          const sil = Number(d.silence_duration || 0).toFixed(1);
+          const tout = Number((d.params && d.params.idle_timeout) || 4.0).toFixed(1);
+          gateEl.textContent = `SILENT ${sil}s / ${tout}s → FLOOR GUARD`;
           gateEl.style.color = '#828a9f';
         } else {
-          gateEl.textContent = 'SIGNAL ACTIVE';
+          gateEl.textContent = 'LIVE AUDIO ACTIVE';
           gateEl.style.color = '#30d158';
         }
         drawStageLEDs(d.leds);
         drawSpectrum(d.spectrum, d.dominant_band);
-        if (d.params && !isDragging) syncSliders(d.params);
+        if (d.params && !isDragging) syncSliders(d.params, d.active_preset, d.active_preset_label);
       } catch (e) {}
     };
     es.onerror = () => {
@@ -698,9 +785,17 @@ def build_state_payload(shared_features: dict[str, Any]) -> dict[str, Any]:
         for i in range(0, total_leds, step)
     ]
 
+    params = get_live_params()
+    active_preset = get_active_preset(params)
+    active_preset_label = PRESETS[active_preset]["label"] if active_preset in PRESETS else "Custom"
+
     return {
         "audio_connected": bool(shared_features.get("audio_connected", True)),
         "audio_device": str(shared_features.get("audio_device", "")),
+        "idle_active": bool(LEDEffects.idle_active),
+        "silence_duration": round(float(LEDEffects.silence_duration), 1),
+        "active_preset": active_preset,
+        "active_preset_label": active_preset_label,
         "volume": round(float(shared_features.get("volume", 0.0)), 4),
         "raw_volume": round(float(shared_features.get("raw_volume", shared_features.get("volume", 0.0))), 4),
         "dominant_freq": round(float(shared_features.get("dominant_freq", 0.0)), 1),
@@ -708,7 +803,7 @@ def build_state_payload(shared_features: dict[str, Any]) -> dict[str, Any]:
         "tonalness": round(float(shared_features.get("tonalness", 0.0)), 3),
         "spectrum": spec_list,
         "leds": sampled_leds,
-        "params": get_live_params(),
+        "params": params,
     }
 
 
@@ -748,9 +843,16 @@ def start_web_server(
                     round(float(0.5 * (SPECTRUM_FREQS[i] + SPECTRUM_FREQS[i + 1])), 1)
                     for i in range(NUM_SPECTRUM_BANDS)
                 ]
+                params = get_live_params()
+                active_preset = get_active_preset(params)
+                active_preset_label = (
+                    PRESETS[active_preset]["label"] if active_preset in PRESETS else "Custom"
+                )
                 self._send_json(
                     {
-                        "params": get_live_params(),
+                        "params": params,
+                        "active_preset": active_preset,
+                        "active_preset_label": active_preset_label,
                         "defaults": DEFAULT_LIVE_PARAMS,
                         "presets": PRESETS,
                         "band_freqs": band_freqs,
@@ -792,12 +894,34 @@ def start_web_server(
                     self._send_json({"error": str(e) or type(e).__name__}, status=HTTPStatus.BAD_REQUEST)
                     return
                 updated = update_live_params(updates)
-                self._send_json({"ok": True, "params": updated})
+                active_preset = get_active_preset(updated)
+                active_preset_label = (
+                    PRESETS[active_preset]["label"] if active_preset in PRESETS else "Custom"
+                )
+                self._send_json(
+                    {
+                        "ok": True,
+                        "params": updated,
+                        "active_preset": active_preset,
+                        "active_preset_label": active_preset_label,
+                    }
+                )
                 return
 
             if self.path == "/api/reset":
                 updated = reset_live_params()
-                self._send_json({"ok": True, "params": updated})
+                active_preset = get_active_preset(updated)
+                active_preset_label = (
+                    PRESETS[active_preset]["label"] if active_preset in PRESETS else "Custom"
+                )
+                self._send_json(
+                    {
+                        "ok": True,
+                        "params": updated,
+                        "active_preset": active_preset,
+                        "active_preset_label": active_preset_label,
+                    }
+                )
                 return
 
             self.send_error(HTTPStatus.NOT_FOUND)

@@ -162,6 +162,7 @@ def main(audio_source='live', filepath=None):
     
     # Shared state for communication between threads
     shared_features = {
+        'allow_idle': True,
         'audio_connected': False,
         'audio_device': '',
         'volume': 0.0,

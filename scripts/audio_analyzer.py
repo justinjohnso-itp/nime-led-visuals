@@ -34,7 +34,11 @@ class AudioAnalyzer:
 
         # 32-band spectrum state
         self.spectrum_max = np.full(NUM_SPECTRUM_BANDS, 0.1)
+        self.slow_global_max = 0.25
         self.prev_spectrum = np.zeros(NUM_SPECTRUM_BANDS)
+        self.prev_raw_bands = np.zeros(NUM_SPECTRUM_BANDS)
+        self.recent_volumes = [0.0, 0.0, 0.0]
+        self.frame_count = 0
 
         # ADSR envelope
         self.envelope_value = 0.0
@@ -88,22 +92,22 @@ class AudioAnalyzer:
             fc = 0.5 * (SPECTRUM_FREQS[i] + SPECTRUM_FREQS[i + 1])
             if fc < 38.0:
                 # Sub-bass rumble control (20-38 Hz): gentle ramp into audible bass roots
-                curve[i] = 0.90 + 0.50 * ((fc - 20.0) / 18.0)
-            elif fc <= 350.0:
-                # Primary bass & fundamental root zone (38-350 Hz): peak emphasis
-                curve[i] = 1.75
-            elif fc <= 950.0:
-                # Midrange chord/vocal/lead root zone (350-950 Hz): strong root presence
-                progress = (np.log10(fc) - np.log10(350.0)) / (np.log10(950.0) - np.log10(350.0))
-                curve[i] = 1.75 - 0.55 * progress  # 1.75 -> 1.20
-            elif fc <= 2200.0:
-                # Upper melody / lower harmonics (950-2200 Hz): smooth roll-off
-                progress = (np.log10(fc) - np.log10(950.0)) / (np.log10(2200.0) - np.log10(950.0))
-                curve[i] = 1.20 - 0.65 * progress  # 1.20 -> 0.55
+                curve[i] = 0.95 + 0.65 * ((fc - 20.0) / 18.0)
+            elif fc <= 360.0:
+                # Primary bass & fundamental root zone (38-360 Hz): peak emphasis
+                curve[i] = 1.85
+            elif fc <= 750.0:
+                # Midrange chord/vocal/lead root zone (360-750 Hz): smooth transition
+                progress = (np.log10(fc) - np.log10(360.0)) / (np.log10(750.0) - np.log10(360.0))
+                curve[i] = 1.85 - 0.90 * progress  # 1.85 -> 0.95
+            elif fc <= 1800.0:
+                # Upper melody / lower harmonics (750-1800 Hz): roll off so high mids don't flash
+                progress = (np.log10(fc) - np.log10(750.0)) / (np.log10(1800.0) - np.log10(750.0))
+                curve[i] = 0.95 - 0.60 * progress  # 0.95 -> 0.35
             else:
-                # High overtones, hi-hats, sibilance (2200-7040 Hz): keep subtle so roots dominate
-                progress = (np.log10(fc) - np.log10(2200.0)) / (np.log10(7040.0) - np.log10(2200.0))
-                curve[i] = max(0.25, 0.55 - 0.30 * progress)  # 0.55 -> 0.25
+                # High overtones, hi-hats, sibilance (1800-7040 Hz): keep subtle so roots dominate
+                progress = (np.log10(fc) - np.log10(1800.0)) / (np.log10(7040.0) - np.log10(1800.0))
+                curve[i] = max(0.18, 0.35 - 0.17 * progress)  # 0.35 -> 0.18
         return curve
     
     def _compute_a_weight(self, freqs):
@@ -138,8 +142,9 @@ class AudioAnalyzer:
         params = get_live_params()
         input_gain = float(params.get("input_gain", INPUT_GAIN))
         noise_gate = float(params.get("noise_gate", NOISE_GATE_THRESHOLD))
-        attack_speed = float(params.get("attack_speed", 0.60))
-        decay_speed = float(params.get("decay_speed", 0.20))
+        spike_suppression = float(params.get("spike_suppression", 0.80))
+        attack_speed = float(params.get("attack_speed", 0.55))
+        decay_speed = float(params.get("decay_speed", 0.22))
         peak_hold_decay = float(params.get("peak_hold_decay", self.spectrum_decay_rate))
         harmonic_supp_strength = float(params.get("harmonic_suppression", 0.85))
         bass_boost_max = float(params.get("bass_boost", 2.2))
@@ -148,19 +153,58 @@ class AudioAnalyzer:
         # Apply input gain
         audio = audio * input_gain
 
-        # Volume (RMS)
-        volume = float(np.sqrt(np.mean(audio ** 2))) if audio.size > 0 else 0.0
+        # Surgical time-domain de-clicker: clamp 1-10 sample USB ADC pop/click glitches
+        # without affecting real musical waveforms (whose 98th percentile is near peak)
+        if audio.size > 16 and spike_suppression > 0.0:
+            abs_audio = np.abs(audio)
+            p98 = float(np.percentile(abs_audio, 98))
+            clip_thresh = max(p98 * (3.8 - 2.0 * spike_suppression), 1e-4)
+            if float(np.max(abs_audio)) > clip_thresh:
+                audio = np.clip(audio, -clip_thresh, clip_thresh)
+
+        # Always roll the 2048-sample spectrum buffer even before noise-gate checks
+        # so stale loud samples never linger in the buffer across quiet gaps
+        self.spectrum_buffer = np.roll(self.spectrum_buffer, -len(audio))
+        self.spectrum_buffer[-len(audio):] = audio
+        self.frame_count += 1
+
+        # Volume (RMS) and multi-frame spike rejection
+        raw_volume = float(np.sqrt(np.mean(audio ** 2))) if audio.size > 0 else 0.0
+        prev_v1 = self.recent_volumes[-1]
+        prev_v2 = self.recent_volumes[-2]
+        self.recent_volumes.append(raw_volume)
+        if len(self.recent_volumes) > 3:
+            self.recent_volumes.pop(0)
+
+        # Suppress isolated 1-frame volume spikes (both near-gate pops and mid-song transient spikes)
+        effective_volume = raw_volume
+        if spike_suppression > 0.0:
+            if prev_v1 < noise_gate * 1.15 and prev_v2 < noise_gate * 1.15 and raw_volume < noise_gate * 4.0:
+                effective_volume = raw_volume * (1.0 - 0.68 * spike_suppression)
+            elif self.frame_count > 8 and raw_volume > max(prev_v1, prev_v2) * 1.8:
+                # Dampen sudden single-frame volume jumps so chill music doesn't flash on transient clicks
+                ref_v = 0.5 * (prev_v1 + prev_v2)
+                effective_volume = ref_v + (raw_volume - ref_v) * (1.0 - 0.65 * spike_suppression)
+
+        volume = effective_volume
+
+        # Minimum peak normalization floor so auto-gain never amplifies near-gate noise to 100%
+        min_peak_floor = max(0.08, (noise_gate * 8.0) ** 2)
 
         # Noise gate - if below threshold, return silence
         if volume < noise_gate:
-            # Decay envelope and spectrum, snap to zero when very small
+            # Decay envelope, running max floor, and spectrum smoothly
             self.envelope_value *= 0.85
             if self.envelope_value < 0.01:
                 self.envelope_value = 0.0
-            self.prev_spectrum *= max(0.0, 1.0 - decay_speed * 0.5)
+            self.spectrum_max = np.maximum(min_peak_floor, self.spectrum_max * peak_hold_decay)
+            self.slow_global_max = max(min_peak_floor, self.slow_global_max * 0.994)
+            self.prev_raw_bands *= 0.5
+            self.prev_spectrum *= max(0.0, 1.0 - decay_speed * 0.65)
+            self.prev_spectrum[self.prev_spectrum < 0.005] = 0.0
             return {
                 "volume": 0.0,
-                "raw_volume": volume,
+                "raw_volume": raw_volume,
                 "bass": 0.0,
                 "mid": 0.0,
                 "high": 0.0,
@@ -178,6 +222,13 @@ class AudioAnalyzer:
                 "tonalness": 0.0,
             }
 
+        # Soft noise-gate knee: signals barely above the noise gate scale up smoothly
+        # instead of jumping straight to full normalized 1.0 brightness
+        knee_span = max(noise_gate * (2.5 + 2.5 * spike_suppression), 0.035)
+        soft_knee_gain = float(np.clip((volume - noise_gate) / knee_span, 0.0, 1.0))
+        if spike_suppression > 0.0:
+            soft_knee_gain = soft_knee_gain ** (1.0 + 0.6 * spike_suppression)
+
         # Ensure frame matches FFT size (for legacy bands)
         if audio.size < self.n_fft:
             frame = np.zeros(self.n_fft, dtype=np.float32)
@@ -191,11 +242,6 @@ class AudioAnalyzer:
         power = spectrum.real ** 2 + spectrum.imag ** 2
 
         # === 32-band spectrum using larger 2048-sample buffer ===
-        # Roll the buffer and add new samples
-        self.spectrum_buffer = np.roll(self.spectrum_buffer, -len(audio))
-        self.spectrum_buffer[-len(audio):] = audio
-        
-        # Larger FFT for cleaner frequency resolution
         spectrum_windowed = self.spectrum_buffer * self.spectrum_window
         spectrum_fft = rfft(spectrum_windowed)
         spectrum_power = spectrum_fft.real ** 2 + spectrum_fft.imag ** 2
@@ -292,6 +338,23 @@ class AudioAnalyzer:
         # Bass bleed: DISABLED for tight fundamental visualization
         # The global normalization now handles bass prominence without spreading energy
 
+        # Per-band 1-frame transient spike rejection during live streaming (after initial 8-frame warmup)
+        # Applied BEFORE updating spectrum_max so 1-frame spikes neither flash nor inflate global_max,
+        # while sustained notes (2+ frames) reach full normalized brightness.
+        if spike_suppression > 0.0 and self.frame_count > 8:
+            filtered_bands = np.copy(spectrum_bands)
+            for i in range(NUM_SPECTRUM_BANDS):
+                prev_b = self.prev_raw_bands[i]
+                curr_b = spectrum_bands[i]
+                # If a band suddenly jumps >2.5x from near-zero in a single frame, blend it smoothly
+                if curr_b > max(prev_b * 2.5, min_peak_floor * 0.5):
+                    band_supp = min(0.80, spike_suppression * (0.85 if i >= 16 else 0.60))
+                    filtered_bands[i] = prev_b + (curr_b - prev_b) * (1.0 - band_supp)
+            self.prev_raw_bands = 0.45 * self.prev_raw_bands + 0.55 * spectrum_bands
+            spectrum_bands = filtered_bands
+        else:
+            self.prev_raw_bands = np.copy(spectrum_bands)
+
         # Find dominant band BEFORE normalization (raw energy)
         total_band_energy = float(np.sum(spectrum_bands))
         if total_band_energy > 0.0:
@@ -304,19 +367,40 @@ class AudioAnalyzer:
             dominant_freq = 0.0
             tonalness = 0.0
 
-        # Update running max with decay (slower for 32-band spectrum to capture sustained notes)
-        self.spectrum_max = np.maximum(spectrum_bands, self.spectrum_max * peak_hold_decay)
+        # Update running max with decay (use multi-second slow ceiling when spike_suppression > 0
+        # so brief pauses in chill songs don't collapse global_max and cause the next note to flash at 100%)
+        raw_current_peak = float(np.max(spectrum_bands))
+        effective_peak_decay = (
+            1.0 - (1.0 - peak_hold_decay) * (1.0 - 0.80 * spike_suppression)
+            if spike_suppression > 0.0
+            else peak_hold_decay
+        )
+        self.spectrum_max = np.maximum(
+            spectrum_bands,
+            np.maximum(min_peak_floor, self.spectrum_max * effective_peak_decay),
+        )
+        # Slow peak tracker (~2.5s half-life at 47fps) prevents quiet/chill passages from over-normalizing
+        if raw_current_peak > self.slow_global_max:
+            rise_rate = 0.45 if self.frame_count > 8 else 1.0
+            self.slow_global_max += (raw_current_peak - self.slow_global_max) * rise_rate
+        else:
+            self.slow_global_max = max(min_peak_floor, self.slow_global_max * 0.986)
 
-        # Normalize using GLOBAL max (not per-band) to keep spectral peaks sharp
-        # This ensures the fundamental frequency stands out from harmonics/noise
-        global_max = float(np.max(self.spectrum_max))
+        # Normalize using GLOBAL max (blend fast peak with multi-second slow peak ceiling)
+        fast_max = max(float(np.max(self.spectrum_max)), min_peak_floor)
+        global_max = (
+            (1.0 - 0.60 * spike_suppression) * fast_max + (0.60 * spike_suppression) * self.slow_global_max
+            if spike_suppression > 0.0 and self.frame_count > 8
+            else fast_max
+        )
+        global_max = max(global_max, min_peak_floor)
         
         spectrum_norm = np.zeros(NUM_SPECTRUM_BANDS)
         for i in range(NUM_SPECTRUM_BANDS):
             # Use global maximum for normalization (not per-band max)
             # This preserves the shape of the spectrum
             if spectrum_bands[i] > 0:
-                spectrum_norm[i] = spectrum_bands[i] / np.maximum(global_max, 0.01)
+                spectrum_norm[i] = (spectrum_bands[i] / global_max) * soft_knee_gain
             else:
                 spectrum_norm[i] = 0.0
         
@@ -330,12 +414,20 @@ class AudioAnalyzer:
                 dominance_exp = 1.0 + (0.95 * root_focus)
                 spectrum_norm = frame_peak * ((spectrum_norm / frame_peak) ** dominance_exp)
 
-        # Smooth with previous frame (reduces flickering)
-        attack = attack_speed
+        # Smooth with previous frame (with slew-rate limit during live playback so bands swell smoothly
+        # instead of strobing on single-chunk transients)
+        attack = attack_speed * (0.25 + 0.75 * soft_knee_gain) if spike_suppression > 0.0 else attack_speed
         decay = decay_speed
+        max_up_step = (0.38 - 0.26 * spike_suppression) if (spike_suppression > 0.0 and self.frame_count > 8) else 1.0
         for i in range(NUM_SPECTRUM_BANDS):
             if spectrum_norm[i] > self.prev_spectrum[i]:
-                self.prev_spectrum[i] += (spectrum_norm[i] - self.prev_spectrum[i]) * attack
+                band_attack = attack * (0.65 if (i >= 16 and spike_suppression > 0.0) else 1.0)
+                delta = (spectrum_norm[i] - self.prev_spectrum[i]) * band_attack
+                if i >= 16 and spike_suppression > 0.0 and self.frame_count > 8:
+                    delta = min(delta, max_up_step * 0.70)
+                else:
+                    delta = min(delta, max_up_step)
+                self.prev_spectrum[i] += delta
             else:
                 self.prev_spectrum[i] += (spectrum_norm[i] - self.prev_spectrum[i]) * decay
 
@@ -408,7 +500,7 @@ class AudioAnalyzer:
 
         return {
             "volume": volume,
-            "raw_volume": volume,
+            "raw_volume": raw_volume,
             "bass": band_norms.get("bass", 0.0),
             "mid": mid,
             "high": high,

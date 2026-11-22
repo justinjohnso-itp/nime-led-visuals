@@ -104,10 +104,14 @@ DEFAULT_LIVE_PARAMS = {
     "root_focus": 0.80,                        # Weighting toward audible root frequencies 40-900Hz & root dominance (0.0 - 1.5)
     "root_real_estate": 1.65,                  # Spatial warp giving audible roots more physical LED strip real estate (1.0 - 2.8)
     "input_gain": float(INPUT_GAIN),           # Audio input gain multiplier (0.5 - 80.0)
-    "noise_gate": float(NOISE_GATE_THRESHOLD), # Silence RMS threshold (0.0 - 0.25)
-    "attack_speed": 0.65,                      # Spectrum rise smoothing factor (0.02 - 1.0)
+    "noise_gate": 0.040,                       # Silence RMS threshold on 0-1 scale (0.0 - 0.35)
+    "spike_suppression": 0.82,                 # Suppresses random 1-frame noise spikes & scales quiet near-gate blips (0.0 - 1.0)
+    "idle_brightness": 0.35,                   # Default floor-safety animation brightness when no band is playing (0.0 - 1.0)
+    "idle_timeout": 4.0,                       # Seconds of silence before Floor Guard automatically activates (0.5 - 30.0)
+    "force_idle": 0.0,                         # 1.0 = force floor-safety idle animation even if audio is present (0.0 or 1.0)
+    "attack_speed": 0.55,                      # Spectrum rise smoothing factor (0.02 - 1.0)
     "decay_speed": 0.22,                       # Spectrum falloff smoothing factor (0.01 - 0.95)
-    "peak_hold_decay": 0.82,                   # Running max decay rate per frame (0.40 - 0.995)
+    "peak_hold_decay": 0.86,                   # Running max decay rate per frame (0.40 - 0.995)
     "harmonic_suppression": 0.85,              # Suppresses overtones so root fundamentals dominate (0.0 - 1.0)
     "bass_boost": 2.2,                         # Low-frequency root boost (0.5 - 5.0)
     "bass_hue": 0.0,                           # Center (low freq) hue in degrees (0 - 360)
@@ -118,8 +122,22 @@ DEFAULT_LIVE_PARAMS = {
 PRESETS = {
     "live_roots": {
         "label": "Live Music Roots (Default)",
-        "description": "Weights audible root notes (40–900 Hz) heavily and gives them ~75% of the LED strip real estate",
+        "description": "Weights audible root notes (40–900 Hz), suppresses spikes, auto-activates Floor Guard after 4s of silence",
         "params": dict(DEFAULT_LIVE_PARAMS),
+    },
+    "chill_anti_flash": {
+        "label": "Chill Set / Anti-Spike",
+        "description": "Maximum spike suppression, smooth gentle attacks, soft knee for quiet/ambient sets",
+        "params": {
+            **DEFAULT_LIVE_PARAMS,
+            "response_intensity": 0.85,
+            "easing_exponent": 1.35,
+            "spike_suppression": 0.95,
+            "noise_gate": 0.045,
+            "attack_speed": 0.35,
+            "decay_speed": 0.14,
+            "peak_hold_decay": 0.90,
+        },
     },
     "live_band_punchy": {
         "label": "Punchy Band Mix",
@@ -132,24 +150,19 @@ PRESETS = {
             "root_focus": 0.95,
             "root_real_estate": 1.80,
             "harmonic_suppression": 0.75,
-            "attack_speed": 0.78,
-            "decay_speed": 0.30,
+            "spike_suppression": 0.70,
+            "attack_speed": 0.72,
+            "decay_speed": 0.28,
             "input_gain": 12.0,
         },
     },
-    "wide_root_bloom": {
-        "label": "Massive Root Bloom",
-        "description": "Extra-wide root clusters that fill the strips with smooth, weighty movement",
+    "floor_safety_standby": {
+        "label": "Force Floor Guard",
+        "description": "Manual override: locks on the perimeter + breathing animation even if loud stage check audio is playing",
         "params": {
             **DEFAULT_LIVE_PARAMS,
-            "brightness": 0.95,
-            "response_intensity": 1.30,
-            "easing_exponent": 0.90,
-            "cluster_width": 1.45,
-            "root_focus": 1.0,
-            "root_real_estate": 1.95,
-            "attack_speed": 0.45,
-            "decay_speed": 0.12,
+            "idle_brightness": 0.42,
+            "force_idle": 1.0,
         },
     },
     "nime_linear": {
@@ -163,10 +176,12 @@ PRESETS = {
             "root_focus": 0.0,
             "root_real_estate": 1.0,
             "harmonic_suppression": 1.0,
+            "spike_suppression": 0.0,
             "bass_boost": 2.0,
             "attack_speed": 0.60,
             "decay_speed": 0.20,
             "peak_hold_decay": 0.80,
+            "force_idle": 0.0,
         },
     },
 }
@@ -205,7 +220,11 @@ def update_live_params(updates: dict, persist: bool = True) -> dict:
         "root_focus": (0.0, 1.5),
         "root_real_estate": (1.0, 2.8),
         "input_gain": (0.5, 80.0),
-        "noise_gate": (0.0, 0.25),
+        "noise_gate": (0.0, 0.35),
+        "spike_suppression": (0.0, 1.0),
+        "idle_brightness": (0.0, 1.0),
+        "idle_timeout": (0.5, 30.0),
+        "force_idle": (0.0, 1.0),
         "attack_speed": (0.02, 1.0),
         "decay_speed": (0.01, 0.95),
         "peak_hold_decay": (0.40, 0.995),
@@ -216,6 +235,13 @@ def update_live_params(updates: dict, persist: bool = True) -> dict:
         "perceptual_correction": (0.0, 1.0),
     }
     with _PARAMS_LOCK:
+        # If the user adjusts any audio-reactive parameter (other than idle_brightness/brightness)
+        # without explicitly setting force_idle, exit forced floor-guard standby automatically
+        if "force_idle" not in updates:
+            reactive_keys = set(updates.keys()) - {"idle_brightness", "brightness"}
+            if reactive_keys and LIVE_PARAMS.get("force_idle", 0.0) >= 0.5:
+                LIVE_PARAMS["force_idle"] = 0.0
+
         for k, v in updates.items():
             if k in DEFAULT_LIVE_PARAMS and isinstance(v, (int, float)):
                 lo, hi = bounds.get(k, (-1e9, 1e9))
@@ -227,6 +253,16 @@ def update_live_params(updates: dict, persist: bool = True) -> dict:
             except Exception as e:
                 print(f"Warning: could not save runtime_params.json: {e}")
         return dict(LIVE_PARAMS)
+
+
+def get_active_preset(params: dict | None = None) -> str | None:
+    """Return the preset ID matching current parameters, or None if customized."""
+    current = params if params is not None else get_live_params()
+    for preset_id, preset_info in PRESETS.items():
+        target = preset_info.get("params", {})
+        if all(abs(float(current.get(k, 0.0)) - float(v)) <= 1e-3 for k, v in target.items()):
+            return preset_id
+    return None
 
 
 def reset_live_params(persist: bool = True) -> dict:

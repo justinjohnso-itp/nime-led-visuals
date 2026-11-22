@@ -1,6 +1,8 @@
 """Visual effects that map audio features to LED patterns"""
 
 import colorsys
+import math
+import time
 import numpy as np
 from config import (
     COLORS, NUM_LEDS_PER_STRIP, NUM_STRIPS, LED_BRIGHTNESS,
@@ -39,6 +41,10 @@ class LEDEffects:
     _prev_brightness = 0.0
     _prev_edge = 0.0
     _prev_bass = 0.0  # Track bass intensity separately for faster decay
+    _last_active_time = 0.0
+    _idle_blend = 0.0
+    idle_active = False
+    silence_duration = 0.0
     last_leds = [(0, 0, 0)] * (NUM_LEDS_PER_STRIP * NUM_STRIPS)
     
     @staticmethod
@@ -161,9 +167,42 @@ class LEDEffects:
         cluster_width = float(params.get("cluster_width", 1.10))
         root_focus = float(params.get("root_focus", 0.80))
         root_real_estate = float(params.get("root_real_estate", 1.65))
+        idle_brightness = float(params.get("idle_brightness", 0.35))
+        idle_timeout = float(params.get("idle_timeout", 4.0))
+        force_idle = float(params.get("force_idle", 0.0))
         bass_hue = float(params.get("bass_hue", 0.0))
         treble_hue = float(params.get("treble_hue", 240.0))
         perceptual_blend = float(params.get("perceptual_correction", 1.0))
+
+        # Track idle state for default floor-safety animation when no band is playing
+        now = time.monotonic()
+        allow_idle = bool(features.get("allow_idle", False))
+        spec_peak = float(np.max(spectrum)) if len(spectrum) > 0 else 0.0
+        vol_now = float(features.get("volume", 0.0))
+
+        if LEDEffects._last_active_time <= 0.0:
+            LEDEffects._last_active_time = now
+
+        if force_idle >= 0.5:
+            LEDEffects.silence_duration = now - LEDEffects._last_active_time
+            LEDEffects._idle_blend = min(1.0, LEDEffects._idle_blend + 0.08)
+        elif not allow_idle or idle_brightness <= 0.001:
+            LEDEffects._idle_blend = 0.0
+            LEDEffects._last_active_time = now
+            LEDEffects.silence_duration = 0.0
+        elif spec_peak >= 0.03 or vol_now > 0.001:
+            LEDEffects._last_active_time = now
+            LEDEffects.silence_duration = 0.0
+            LEDEffects._idle_blend = max(0.0, LEDEffects._idle_blend - 0.20)
+        else:
+            LEDEffects.silence_duration = max(0.0, now - LEDEffects._last_active_time)
+            if LEDEffects.silence_duration >= idle_timeout:
+                LEDEffects._idle_blend = min(1.0, LEDEffects._idle_blend + 0.035)
+            else:
+                LEDEffects._idle_blend = max(0.0, LEDEffects._idle_blend - 0.10)
+
+        LEDEffects.idle_active = LEDEffects._idle_blend > 0.05
+        idle_blend = LEDEffects._idle_blend
 
         # Pre-compute band mapping for all LED positions
         # Map band 0 (lowest freq) at center, band 31 (highest freq) at edges
@@ -275,6 +314,44 @@ class LEDEffects:
             r = int(r_f * 255)
             g = int(g_f * 255)
             b = int(b_f * 255)
+
+            # Blend floor-safety idle animation when no band is playing (or forced on)
+            # Illuminates strip boundaries/corners and runs a high-contrast traveling wave + sweeping comet
+            if idle_blend > 0.001 and idle_brightness > 0.001:
+                pos_in_strip = i % NUM_LEDS_PER_STRIP
+                dist_to_strip_end = min(pos_in_strip, (NUM_LEDS_PER_STRIP - 1) - pos_in_strip)
+                # Steady pulsing safety beacons on the first/last 7 LEDs of each of the 3 floor bars
+                is_end_beacon = dist_to_strip_end < 7
+                if is_end_beacon:
+                    beacon_pulse = 0.65 + 0.35 * math.sin(now * 2.8 + (i // NUM_LEDS_PER_STRIP) * 1.2)
+                    idle_v = idle_brightness * master_brightness * beacon_pulse * 0.92
+                    idle_hue = (bass_hue + 12.0) % 360.0
+                else:
+                    # High-contrast mirrored outward wave + counter-ripple + sweeping comet orb
+                    norm_dist = dist_from_center / max(1.0, float(leds_per_side))
+                    wave_out = (0.5 + 0.5 * math.sin(now * 2.8 - norm_dist * 8.5)) ** 3.2
+                    wave_in = (0.5 + 0.5 * math.sin(now * 1.7 + norm_dist * 5.5)) ** 2.6
+                    comet_pos = 0.5 + 0.46 * math.sin(now * 1.15)
+                    comet_glow = math.exp(-(((norm_dist - comet_pos) / 0.11) ** 2))
+                    motion_env = min(1.0, 0.08 + 0.58 * wave_out + 0.20 * wave_in + 0.55 * comet_glow)
+                    idle_v = idle_brightness * master_brightness * motion_env * 0.88
+                    idle_hue = (band_hue + 24.0 * wave_out - 18.0 * comet_glow) % 360.0
+
+                idle_corr = (1.0 - perceptual_blend) + (
+                    perceptual_blend * LEDEffects.get_perceptual_brightness_correction(idle_hue)
+                )
+                idle_v = min(1.0, idle_v * idle_corr)
+                ir_f, ig_f, ib_f = colorsys.hsv_to_rgb(idle_hue / 360.0, 1.0, idle_v)
+                ir = int(ir_f * 255 * idle_blend)
+                ig = int(ig_f * 255 * idle_blend)
+                ib = int(ib_f * 255 * idle_blend)
+
+                if force_idle >= 0.5:
+                    r, g, b = ir, ig, ib
+                else:
+                    r = max(r, ir)
+                    g = max(g, ig)
+                    b = max(b, ib)
             
             leds.append((r, g, b))
         
