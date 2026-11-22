@@ -329,11 +329,27 @@ HTML_PAGE = """<!DOCTYPE html>
       </div>
       <div class="control-row">
         <div class="control-label">
+          <span class="control-name">Bass Frequency Floor</span>
+          <span class="control-val" id="val_bass_floor_hz">55 Hz</span>
+        </div>
+        <input type="range" id="ctrl_bass_floor_hz" min="20.0" max="150.0" step="2.0" data-key="bass_floor_hz">
+        <div class="control-hint">Lowest frequency mapped to the exact middle of the center strip (raise if center is dark)</div>
+      </div>
+      <div class="control-row">
+        <div class="control-label">
+          <span class="control-name">Center Strip Boost &amp; Fill</span>
+          <span class="control-val" id="val_center_strip_boost">1.65x</span>
+        </div>
+        <input type="range" id="ctrl_center_strip_boost" min="0.5" max="3.0" step="0.05" data-key="center_strip_boost">
+        <div class="control-hint">Extra brightness &amp; downward bass bloom into the physical center strip</div>
+      </div>
+      <div class="control-row">
+        <div class="control-label">
           <span class="control-name">Audible Root Weighting</span>
-          <span class="control-val" id="val_root_focus">0.80</span>
+          <span class="control-val" id="val_root_focus">0.85</span>
         </div>
         <input type="range" id="ctrl_root_focus" min="0.0" max="1.5" step="0.05" data-key="root_focus">
-        <div class="control-hint">Emphasizes musical root notes (40–950 Hz) &amp; suppresses background spectral wash</div>
+        <div class="control-hint">Emphasizes musical root notes (45–900 Hz) &amp; suppresses background spectral wash</div>
       </div>
       <div class="control-row">
         <div class="control-label">
@@ -522,6 +538,8 @@ HTML_PAGE = """<!DOCTYPE html>
 
   function formatVal(key, val) {
     if (key === 'bass_hue' || key === 'treble_hue') return Math.round(val) + '°';
+    if (key === 'bass_floor_hz') return Math.round(val) + ' Hz';
+    if (key === 'center_strip_boost') return Number(val).toFixed(2) + 'x';
     if (key === 'idle_timeout') return Number(val).toFixed(1) + 's';
     if (key === 'noise_gate') return Number(val).toFixed(3);
     if (key === 'input_gain') return Number(val).toFixed(1) + 'x';

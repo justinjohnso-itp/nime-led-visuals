@@ -255,13 +255,13 @@ class AudioAnalyzer:
             if idx is not None and len(idx) > 0:
                 spectrum_bands[i] = float(np.mean(spectrum_power[idx]))
         
-        # Bass boost: low frequencies naturally quieter, enhance them for visualization
-        # Only boost the VERY LOWEST bands (0-3) to avoid flattening the spectrum
-        # CONSERVATIVE boost to keep spectrum tight around fundamental
+        # Bass boost: low frequencies naturally quieter in live line feeds, enhance them
+        # across the full bass & low-mid root range (45 Hz - 220 Hz, bands 0-9) so the center strip
+        # stays rich and well-lit
         bass_boost = np.ones(NUM_SPECTRUM_BANDS)
-        for i in range(4):
-            # Ramp from bass_boost_max (band 0) to 1.0x (band 4)
-            bass_boost[i] = bass_boost_max - (i / 4.0) * (bass_boost_max - 1.0)
+        for i in range(10):
+            # Smooth ramp from bass_boost_max (band 0) to 1.0x (band 10)
+            bass_boost[i] = bass_boost_max - (i / 10.0) * (bass_boost_max - 1.0)
         spectrum_bands = spectrum_bands * bass_boost
 
         # Audible root frequency weighting (live music tuning):

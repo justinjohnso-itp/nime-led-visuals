@@ -162,10 +162,12 @@ class LEDEffects:
         
         params = get_live_params()
         master_brightness = float(params.get("brightness", LED_BRIGHTNESS))
-        response_intensity = float(params.get("response_intensity", 1.15))
-        easing_exponent = float(params.get("easing_exponent", 1.25))
-        cluster_width = float(params.get("cluster_width", 1.10))
-        root_focus = float(params.get("root_focus", 0.80))
+        response_intensity = float(params.get("response_intensity", 1.20))
+        easing_exponent = float(params.get("easing_exponent", 1.15))
+        cluster_width = float(params.get("cluster_width", 1.20))
+        bass_floor_hz = float(params.get("bass_floor_hz", 55.0))
+        center_strip_boost = float(params.get("center_strip_boost", 1.65))
+        root_focus = float(params.get("root_focus", 0.85))
         root_real_estate = float(params.get("root_real_estate", 1.65))
         idle_brightness = float(params.get("idle_brightness", 0.35))
         idle_timeout = float(params.get("idle_timeout", 4.0))
@@ -173,6 +175,21 @@ class LEDEffects:
         bass_hue = float(params.get("bass_hue", 0.0))
         treble_hue = float(params.get("treble_hue", 240.0))
         perceptual_blend = float(params.get("perceptual_correction", 1.0))
+
+        # Downward root bloom into the lower bass bands so musical roots in the 70-260 Hz
+        # range also warm and fill the very center of the center strip
+        effective_spectrum = np.array(spectrum[:32], dtype=np.float32, copy=True)
+        if center_strip_boost > 1.0:
+            down_bleed = min(0.85, (center_strip_boost - 1.0) * 0.42)
+            # Propagate energy downward from low-mid/upper-bass roots (bands 12..1) toward band 0
+            for b in range(11, -1, -1):
+                neighbor_max = float(np.max(effective_spectrum[b + 1 : min(15, b + 5)]))
+                effective_spectrum[b] = max(
+                    effective_spectrum[b],
+                    effective_spectrum[b + 1] * (0.65 + 0.25 * down_bleed),
+                    neighbor_max * down_bleed * 0.55,
+                )
+        spectrum = effective_spectrum
 
         # Track idle state for default floor-safety animation when no band is playing
         now = time.monotonic()
@@ -205,17 +222,22 @@ class LEDEffects:
         idle_blend = LEDEffects._idle_blend
 
         # Pre-compute band mapping for all LED positions
-        # Map band 0 (lowest freq) at center, band 31 (highest freq) at edges
-        # root_real_estate > 1.0 warps physical strip space so audible root bands (0-20)
-        # get up to ~75% of the physical LEDs across the 3 strips
+        # Find the fractional band index corresponding to bass_floor_hz so the exact center
+        # of the center strip starts at bass_floor_hz instead of dead sub-bass rumble
+        f0 = float(SPECTRUM_FREQS[0])
+        f_max = float(SPECTRUM_FREQS[-1])
+        clamped_floor = max(f0, min(250.0, bass_floor_hz))
+        start_band = 31.0 * (math.log10(clamped_floor) - math.log10(f0)) / (math.log10(f_max) - math.log10(f0))
+        start_band = max(0.0, min(14.0, start_band))
+
         band_map = []  # [(band_idx, pos_in_band), ...] for each position
         for pos in range(leds_per_side):
             if leds_per_side <= 1:
-                band_map.append((0, 0.5))
+                band_map.append((int(start_band), 0.5))
             else:
                 norm_pos = (pos + 0.5) / leds_per_side
                 warped_pos = norm_pos ** max(0.5, root_real_estate)
-                band_frac = warped_pos * 31.0
+                band_frac = start_band + warped_pos * (31.0 - start_band)
                 band_idx = min(31, int(band_frac))
                 
                 # Position within that band (0.0 at start, 1.0 at end)
@@ -292,6 +314,12 @@ class LEDEffects:
             if band_idx < 28 and w4 > 0.0:
                 next4_weight = w4 * max(0.0, (1.0 - pos_in_band) / 0.50)
                 feathered_energy += next4_weight * float(spectrum[band_idx + 4])
+
+            # Extra gain boost for LEDs on the physical center strip (dist_from_center < 72)
+            if dist_from_center < (NUM_LEDS_PER_STRIP // 2) and center_strip_boost != 1.0:
+                center_prox = 1.0 - (dist_from_center / float(NUM_LEDS_PER_STRIP // 2))
+                strip_gain = 1.0 + (center_strip_boost - 1.0) * (0.55 + 0.45 * center_prox)
+                feathered_energy *= strip_gain
 
             feathered_energy = min(1.0, feathered_energy * response_intensity)
             if feathered_energy > 0.0 and abs(easing_exponent - 1.0) > 0.01:

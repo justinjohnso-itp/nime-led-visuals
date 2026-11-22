@@ -28,11 +28,13 @@ FREQ_BANDS = [
 ]
 
 # 32-band spectrum for smooth color mapping
-# Logarithmically spaced from instrument's frequency range (20 Hz to 7040 Hz)
-# Extended lower range to capture 30s Hz frequencies from NIME controller
+# Logarithmically spaced from audible bass root floor (45 Hz) to 7040 Hz
+# Starting at 45 Hz (instead of 20 Hz) ensures the center strip (Bands 0-9) maps to
+# real musical bass & low-mid fundamentals (45 Hz - 190 Hz) rather than silent 20-40 Hz sub-rumble
 import numpy as np
 NUM_SPECTRUM_BANDS = 32
-SPECTRUM_FREQS = np.logspace(np.log10(20), np.log10(7040), NUM_SPECTRUM_BANDS + 1)
+FREQ_FLOOR_DEFAULT = 45.0
+SPECTRUM_FREQS = np.logspace(np.log10(FREQ_FLOOR_DEFAULT), np.log10(7040), NUM_SPECTRUM_BANDS + 1)
 
 # Legacy band definitions for compatibility (remapped to instrument range)
 BASS_LOW = 20        # Extended lower limit (was C1 at 32.7 Hz)
@@ -98,10 +100,12 @@ _RUNTIME_PARAMS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.absp
 
 DEFAULT_LIVE_PARAMS = {
     "brightness": float(LED_BRIGHTNESS),       # Master LED brightness (0.0 - 1.0)
-    "response_intensity": 1.15,                # Pre-easing energy multiplier (0.1 - 3.0)
-    "easing_exponent": 1.25,                   # Easing curve gamma: <1 softer/wider, 1 linear, >1 punchier peaks (0.25 - 3.5)
-    "cluster_width": 1.10,                     # Adjacent band feathering multiplier (0.0 - 2.5)
-    "root_focus": 0.80,                        # Weighting toward audible root frequencies 40-900Hz & root dominance (0.0 - 1.5)
+    "response_intensity": 1.20,                # Pre-easing energy multiplier (0.1 - 3.0)
+    "easing_exponent": 1.15,                   # Easing curve gamma: <1 softer/wider, 1 linear, >1 punchier peaks (0.25 - 3.5)
+    "cluster_width": 1.20,                     # Adjacent band feathering multiplier (0.0 - 2.5)
+    "bass_floor_hz": 55.0,                     # Lowest frequency mapped to exact center of center strip (20.0 - 160.0 Hz)
+    "center_strip_boost": 1.65,                # Extra gain & downward root bloom into the center strip (0.5 - 3.5)
+    "root_focus": 0.85,                        # Weighting toward audible root frequencies 45-900Hz & root dominance (0.0 - 1.5)
     "root_real_estate": 1.65,                  # Spatial warp giving audible roots more physical LED strip real estate (1.0 - 2.8)
     "input_gain": float(INPUT_GAIN),           # Audio input gain multiplier (0.5 - 80.0)
     "noise_gate": 0.040,                       # Silence RMS threshold on 0-1 scale (0.0 - 0.35)
@@ -113,7 +117,7 @@ DEFAULT_LIVE_PARAMS = {
     "decay_speed": 0.22,                       # Spectrum falloff smoothing factor (0.01 - 0.95)
     "peak_hold_decay": 0.86,                   # Running max decay rate per frame (0.40 - 0.995)
     "harmonic_suppression": 0.85,              # Suppresses overtones so root fundamentals dominate (0.0 - 1.0)
-    "bass_boost": 2.2,                         # Low-frequency root boost (0.5 - 5.0)
+    "bass_boost": 2.6,                         # Low-frequency root boost (0.5 - 5.0)
     "bass_hue": 0.0,                           # Center (low freq) hue in degrees (0 - 360)
     "treble_hue": 240.0,                       # Edge (high freq) hue in degrees (0 - 360)
     "perceptual_correction": 1.0,              # Blend factor for perceptual luminance dimming (0.0 - 1.0)
@@ -122,16 +126,18 @@ DEFAULT_LIVE_PARAMS = {
 PRESETS = {
     "live_roots": {
         "label": "Live Music Roots (Default)",
-        "description": "Weights audible root notes (40–900 Hz), suppresses spikes, auto-activates Floor Guard after 4s of silence",
+        "description": "55 Hz bass floor + strong center-strip bloom, weights audible roots (55–900 Hz), auto Floor Guard",
         "params": dict(DEFAULT_LIVE_PARAMS),
     },
     "chill_anti_flash": {
         "label": "Chill Set / Anti-Spike",
-        "description": "Maximum spike suppression, smooth gentle attacks, soft knee for quiet/ambient sets",
+        "description": "Warm 65 Hz center strip glow, maximum spike suppression, smooth gentle attacks for chill/ambient sets",
         "params": {
             **DEFAULT_LIVE_PARAMS,
-            "response_intensity": 0.85,
-            "easing_exponent": 1.35,
+            "bass_floor_hz": 65.0,
+            "center_strip_boost": 1.85,
+            "response_intensity": 1.0,
+            "easing_exponent": 1.20,
             "spike_suppression": 0.95,
             "noise_gate": 0.045,
             "attack_speed": 0.35,
@@ -141,12 +147,14 @@ PRESETS = {
     },
     "live_band_punchy": {
         "label": "Punchy Band Mix",
-        "description": "Fast transient attack, high contrast easing curve, strong bass/mid root lock for loud full bands",
+        "description": "Fast transient attack, high contrast easing curve, strong center-strip bass lock for loud full bands",
         "params": {
             **DEFAULT_LIVE_PARAMS,
-            "response_intensity": 1.25,
-            "easing_exponent": 1.55,
-            "cluster_width": 1.0,
+            "bass_floor_hz": 50.0,
+            "center_strip_boost": 1.75,
+            "response_intensity": 1.30,
+            "easing_exponent": 1.50,
+            "cluster_width": 1.15,
             "root_focus": 0.95,
             "root_real_estate": 1.80,
             "harmonic_suppression": 0.75,
@@ -167,9 +175,11 @@ PRESETS = {
     },
     "nime_linear": {
         "label": "NIME Original (Linear)",
-        "description": "Original unwarped 32-band mapping for single-instrument sweeps",
+        "description": "Original unwarped 20 Hz–7040 Hz 32-band mapping for single-instrument sweeps",
         "params": {
             **DEFAULT_LIVE_PARAMS,
+            "bass_floor_hz": 20.0,
+            "center_strip_boost": 1.0,
             "response_intensity": 1.0,
             "easing_exponent": 1.0,
             "cluster_width": 1.0,
@@ -217,6 +227,8 @@ def update_live_params(updates: dict, persist: bool = True) -> dict:
         "response_intensity": (0.1, 3.0),
         "easing_exponent": (0.25, 3.5),
         "cluster_width": (0.0, 2.5),
+        "bass_floor_hz": (20.0, 160.0),
+        "center_strip_boost": (0.5, 3.5),
         "root_focus": (0.0, 1.5),
         "root_real_estate": (1.0, 2.8),
         "input_gain": (0.5, 80.0),

@@ -9,10 +9,9 @@
 
 ## What Was Accomplished & Verified
 - **Hardware & Wiring Verified:** Confirmed single USB power + ground harness from Pi USB port + GPIO 21 (physical pin 40) data line works cleanly without ground-reference flicker. Added `~/.ssh/github_ed25519.pub` to `admin@nime-visuals.local:~/.ssh/authorized_keys`.
-- **Audible Root Frequency Weighting (`scripts/audio_analyzer.py`):**
-  - Added `_compute_root_weight_curve()` controlled by live `root_focus` parameter (`default: 0.80`).
-  - Boosts audible musical root fundamentals (`38–950 Hz`, bands `0–20` up to `1.75x`), rolls off upper mids (`950–2200 Hz`), and attenuates high overtone/cymbal wash (`>2200 Hz` down to `0.25x`).
-  - Added peak-relative root dominance contrast (`(spectrum_norm / frame_peak) ** (1 + 0.95 * root_focus)`) so defining root notes command the visual field during full live mixes while keeping peaks at `1.0`.
+- **Center-Strip Bass Floor & Downward Root Bloom (`scripts/config.py`, `scripts/audio_analyzer.py`, `scripts/effects.py`):**
+  - Raised `SPECTRUM_FREQS` base from `20 Hz` to `45 Hz` and added live `bass_floor_hz` (`default: 55 Hz`, slider `20–150 Hz`) + `center_strip_boost` (`default: 1.65x`, slider `0.5–3.0x`).
+  - Added downward root bloom in `effects.py` and widened `bass_boost` across bands `0–9` (`45–220 Hz`) so musical bass/low-mid roots (`60–220 Hz`) strongly illuminate all 144 LEDs of the physical center strip instead of leaving the center dark when 20–45 Hz sub-rumble is absent.
 - **Anti-Spike Mitigation & Floor-Safety Idle Animation (`scripts/audio_analyzer.py`, `scripts/effects.py`, `scripts/config.py`, `scripts/web_server.py`):**
   - Recorded live incoming telemetry from the Pi and eliminated random flashes during chill music via 4 layers (`spike_suppression`, default `0.82`): (1) 98th-percentile time-domain de-clicker for USB ADC pops, (2) rolling `spectrum_buffer` updates even during noise-gate closure so stale loud samples never burst when the gate opens, (3) soft noise-gate knee + pre-normalization per-band 1-frame jump filter + multi-second slow peak ceiling (`slow_global_max`) so brief pauses don't collapse `global_max` and cause the next chill note to flash at 100%, and (4) upward slew-rate limiting (especially on upper blue bands `16..31`).
   - Added automatic **Floor Guard** idle animation (`idle_brightness=0.35`, `idle_timeout=4.0s`) that smoothly fades in after `idle_timeout` seconds of silence (and fades out in ~80ms when music plays) with pulsing corner/end beacons on each of the 3 bars plus high-contrast outward traveling waves and a sweeping comet orb so nobody steps on the floor strips between sets.
