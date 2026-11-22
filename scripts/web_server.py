@@ -417,10 +417,10 @@ HTML_PAGE = """<!DOCTYPE html>
       <div class="control-row">
         <div class="control-label">
           <span class="control-name">Idle Floor-Guard Brightness</span>
-          <span class="control-val" id="val_idle_brightness">0.35</span>
+          <span class="control-val" id="val_idle_brightness">0.28</span>
         </div>
         <input type="range" id="ctrl_idle_brightness" min="0.0" max="1.0" step="0.02" data-key="idle_brightness">
-        <div class="control-hint">Safety perimeter &amp; wave/comet motion when no band is playing so nobody steps on the strips</div>
+        <div class="control-hint">Safety perimeter &amp; breathing glow when no band is playing so nobody steps on the strips</div>
       </div>
       <div class="control-row">
         <div class="control-label">

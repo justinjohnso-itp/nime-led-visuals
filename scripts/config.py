@@ -110,7 +110,7 @@ DEFAULT_LIVE_PARAMS = {
     "input_gain": float(INPUT_GAIN),           # Audio input gain multiplier (0.5 - 80.0)
     "noise_gate": 0.040,                       # Silence RMS threshold on 0-1 scale (0.0 - 0.35)
     "spike_suppression": 0.82,                 # Suppresses random 1-frame noise spikes & scales quiet near-gate blips (0.0 - 1.0)
-    "idle_brightness": 0.35,                   # Default floor-safety animation brightness when no band is playing (0.0 - 1.0)
+    "idle_brightness": 0.28,                   # Default floor-safety animation brightness when no band is playing (0.0 - 1.0)
     "idle_timeout": 4.0,                       # Seconds of silence before Floor Guard automatically activates (0.5 - 30.0)
     "force_idle": 0.0,                         # 1.0 = force floor-safety idle animation even if audio is present (0.0 or 1.0)
     "attack_speed": 0.55,                      # Spectrum rise smoothing factor (0.02 - 1.0)

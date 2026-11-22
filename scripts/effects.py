@@ -169,7 +169,7 @@ class LEDEffects:
         center_strip_boost = float(params.get("center_strip_boost", 1.65))
         root_focus = float(params.get("root_focus", 0.85))
         root_real_estate = float(params.get("root_real_estate", 1.65))
-        idle_brightness = float(params.get("idle_brightness", 0.35))
+        idle_brightness = float(params.get("idle_brightness", 0.28))
         idle_timeout = float(params.get("idle_timeout", 4.0))
         force_idle = float(params.get("force_idle", 0.0))
         bass_hue = float(params.get("bass_hue", 0.0))
@@ -344,26 +344,23 @@ class LEDEffects:
             b = int(b_f * 255)
 
             # Blend floor-safety idle animation when no band is playing (or forced on)
-            # Illuminates strip boundaries/corners and runs a high-contrast traveling wave + sweeping comet
+            # Illuminates strip boundaries/corners and runs a slow breathing wave so nobody steps on the bars
             if idle_blend > 0.001 and idle_brightness > 0.001:
                 pos_in_strip = i % NUM_LEDS_PER_STRIP
                 dist_to_strip_end = min(pos_in_strip, (NUM_LEDS_PER_STRIP - 1) - pos_in_strip)
-                # Steady pulsing safety beacons on the first/last 7 LEDs of each of the 3 floor bars
-                is_end_beacon = dist_to_strip_end < 7
+                # Steady safety beacons on the first/last 6 LEDs of each of the 3 floor bars
+                is_end_beacon = dist_to_strip_end < 6
                 if is_end_beacon:
-                    beacon_pulse = 0.65 + 0.35 * math.sin(now * 2.8 + (i // NUM_LEDS_PER_STRIP) * 1.2)
-                    idle_v = idle_brightness * master_brightness * beacon_pulse * 0.92
-                    idle_hue = (bass_hue + 12.0) % 360.0
+                    beacon_pulse = 0.78 + 0.22 * math.sin(now * 2.2)
+                    idle_v = idle_brightness * master_brightness * beacon_pulse * 0.85
+                    idle_hue = (bass_hue + 10.0) % 360.0
                 else:
-                    # High-contrast mirrored outward wave + counter-ripple + sweeping comet orb
+                    # Slow mirrored traveling wave from center outward across all 3 strips
                     norm_dist = dist_from_center / max(1.0, float(leds_per_side))
-                    wave_out = (0.5 + 0.5 * math.sin(now * 2.8 - norm_dist * 8.5)) ** 3.2
-                    wave_in = (0.5 + 0.5 * math.sin(now * 1.7 + norm_dist * 5.5)) ** 2.6
-                    comet_pos = 0.5 + 0.46 * math.sin(now * 1.15)
-                    comet_glow = math.exp(-(((norm_dist - comet_pos) / 0.11) ** 2))
-                    motion_env = min(1.0, 0.08 + 0.58 * wave_out + 0.20 * wave_in + 0.55 * comet_glow)
-                    idle_v = idle_brightness * master_brightness * motion_env * 0.88
-                    idle_hue = (band_hue + 24.0 * wave_out - 18.0 * comet_glow) % 360.0
+                    wave = 0.5 + 0.5 * math.sin(now * 1.4 - norm_dist * 4.5)
+                    breathe = 0.45 + 0.55 * (wave ** 1.6)
+                    idle_v = idle_brightness * master_brightness * breathe * 0.45
+                    idle_hue = band_hue
 
                 idle_corr = (1.0 - perceptual_blend) + (
                     perceptual_blend * LEDEffects.get_perceptual_brightness_correction(idle_hue)
