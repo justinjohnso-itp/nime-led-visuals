@@ -51,8 +51,11 @@ pixi install
 # Test LED strips
 pixi run test-leds
 
-# Test audio with file
-pixi run test-audio music/test.mp3
+# Test audio analysis
+pixi run test-audio
+
+# Run file visualization + web console (http://localhost:8080/)
+pixi run run-file
 
 # Run live visualization
 pixi run run-live
@@ -65,29 +68,27 @@ journalctl -u nime-led-visuals -f
 
 ```bash
 # Test audio analysis
-pixi run test-audio music/test.mp3
+pixi run test-audio
+
+# Run file visualization + web console (http://localhost:8080/)
+pixi run run-file
 ```
 
 ## How It Works
 
-Analyzes incoming audio in real-time:
-- **Spectral centroid** identifies the dominant frequency
-- **Bandwidth** measures how broad the spectrum is
-- Maps to a color: red (20 Hz) → green (450 Hz) → blue (20 kHz)
-- Brightness follows volume
-- Edge LEDs show secondary frequencies
-
-Example: Playing a low note lights up mostly red with some orange edges. Playing a high note lights up mostly blue with some cyan edges.
+Analyzes incoming audio at 48 kHz and renders a live stage show across 3 floor bars (`Stage Left`, `Center Stage`, `Stage Right`):
+- **32-band logarithmic spectrum** (`45–7040 Hz`) with 2nd–15th harmonic suppression, audible root weighting (`40–950 Hz`), downward root bloom (`center_strip_boost`), and 4-stage anti-spike filtering
+- **Floor Guard idle safety mode** (`idle_brightness=0.28`) fades in strip-end safety beacons and a gentle breathing wave between sets
+- **Web Control UI** on ports `80` and `8080` (`http://nime-visuals.local/`) with live 3-bar LED preview, 32-band spectrum, presets, and persistent parameter sliders (`runtime_params.json`)
 
 ## Code Structure
 
-- `main.py` - Entry point, threading, main loop
-- `audio_analyzer.py` - FFT analysis, spectral centroid/bandwidth calculation
-- `audio_input.py` - Audio device interface
-- `effects.py` - LED color mapping from audio features
-- `config.py` - All tunable constants
-
-All code is self-documented with docstrings and inline comments explaining the algorithms.
+- `scripts/main.py` - Entry point, audio/LED threads, hot-plug retry loop, terminal monitor
+- `scripts/audio_analyzer.py` - Dual-FFT 32-band spectrum, harmonic suppression, root weighting, and spike filtering
+- `scripts/audio_input.py` - Live USB audio (`sounddevice`) and file (`librosa`) input handlers
+- `scripts/effects.py` - Mirrored root-warped spectrum renderer, downward root bloom, and Floor Guard idle animation
+- `scripts/web_server.py` - Zero-dependency HTTP + SSE live control UI on ports `80` and `8080`
+- `scripts/config.py` - Tunable constants, presets, and thread-safe runtime state
 
 ## Hardware
 
@@ -140,4 +141,6 @@ Optional: Wire an LED (with 330Ω resistor) to GPIO26 - lights up when safe to u
 
 ## Project Context
 
-See `AGENTS.md` for development decisions and cross-platform setup details.
+- [`HANDOFF.md`](./HANDOFF.md) - Live root tuning, Floor Guard idle safety mode, and web control UI details
+- [`ROADMAP.md`](./ROADMAP.md) - OctoRig comparison, immediate performance fixes, and planned NIME/DSP/hardware tracks
+- [`AGENTS.md`](./AGENTS.md) - Development decisions and cross-platform setup details
